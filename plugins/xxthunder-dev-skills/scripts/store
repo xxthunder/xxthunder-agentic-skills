@@ -1,0 +1,145 @@
+#!/usr/bin/env sh
+# store — resolve a cross-repo store from a variable pair, and commit-and-push
+# a result into it. Shared by the `learnings` and `logbook` skills.
+#
+#   store resolve <PREFIX>
+#       Prints the store's absolute path on stdout. Resolution order, in which
+#       the first match wins and nothing is ever guessed:
+#         1. the current directory is the store — it is <PREFIX>_PATH, or its
+#            `origin` is <PREFIX>_REMOTE — used as-is, never pulled;
+#         2. <PREFIX>_PATH exists — `git pull --ff-only`, then used;
+#         3. <PREFIX>_REMOTE is set — cloned once into
+#            $XDG_CACHE_HOME/xxthunder-dev-skills/stores/<prefix>, pulled after;
+#         4. nothing configured — says so on stderr, exits 2.
+#
+#   store commit-push <STORE_DIR> <MESSAGE> <PATH>...
+#       Stages the paths, commits, pushes. A rejected push gets one
+#       `pull --rebase` and one retry; a rebase conflict is aborted and
+#       reported, never resolved. The local commit is kept in every failure
+#       so nothing written is lost.
+#
+# The variable pair lives in the user's settings, never in a consuming repo —
+# the store points into repositories, no repository points into the store.
+# Authentication is the environment's business. Written to POSIX sh rules,
+# extensionless like the hooks, for the same Windows reason (see run-hook.cmd).
+
+set -u
+
+usage() {
+    printf 'usage: store resolve <PREFIX>\n       store commit-push <STORE_DIR> <MESSAGE> <PATH>...\n' >&2
+    exit 64
+}
+
+die() {
+    code=$1
+    shift
+    printf 'store: %s\n' "$*" >&2
+    exit "$code"
+}
+
+physical() {
+    (cd "$1" 2>/dev/null && pwd -P)
+}
+
+# --- resolve ------------------------------------------------------------------
+
+resolve() {
+    prefix=$1
+    eval "path=\${${prefix}_PATH:-}"
+    eval "remote=\${${prefix}_REMOTE:-}"
+
+    # 1. The current directory is the store. Used as-is: pulling underneath a
+    #    session that is already working in the store would move its ground.
+    if top=$(git rev-parse --show-toplevel 2>/dev/null); then
+        if [ -n "$path" ] && [ "$(physical "$path")" = "$top" ]; then
+            printf '%s\n' "$top"
+            return 0
+        fi
+        if [ -n "$remote" ]; then
+            origin=$(git -C "$top" remote get-url origin 2>/dev/null || true)
+            if [ "$origin" = "$remote" ]; then
+                printf '%s\n' "$top"
+                return 0
+            fi
+        fi
+    fi
+
+    # 2. A local checkout is configured and present.
+    if [ -n "$path" ]; then
+        if [ -d "$path" ]; then
+            git -C "$path" pull -q --ff-only ||
+                die 1 "cannot fast-forward ${prefix}_PATH=$path — the checkout has diverged from its remote; resolve it by hand"
+            physical "$path"
+            return 0
+        fi
+        printf 'store: %s_PATH=%s does not exist; trying %s_REMOTE\n' "$prefix" "$path" "$prefix" >&2
+    fi
+
+    # 3. A remote is configured: one clone per prefix, reused across sessions.
+    if [ -n "$remote" ]; then
+        lower=$(printf '%s' "$prefix" | tr '[:upper:]' '[:lower:]')
+        cache="${XDG_CACHE_HOME:-$HOME/.cache}/xxthunder-dev-skills/stores/$lower"
+        if git -C "$cache" rev-parse --git-dir >/dev/null 2>&1; then
+            git -C "$cache" pull -q --ff-only ||
+                die 1 "cannot fast-forward the cached clone at $cache; remove it to re-clone"
+        else
+            mkdir -p "$(dirname "$cache")" || die 1 "cannot create $(dirname "$cache")"
+            git clone -q "$remote" "$cache" || die 1 "cannot clone ${prefix}_REMOTE=$remote"
+        fi
+        printf '%s\n' "$cache"
+        return 0
+    fi
+
+    # 4. Nothing configured. Say so; never guess.
+    die 2 "no store configured — set ${prefix}_PATH (a local checkout) or ${prefix}_REMOTE (a clone URL) in your user settings (~/.claude/settings.json → env)"
+}
+
+# --- commit-push --------------------------------------------------------------
+
+commit_push() {
+    dir=$1
+    message=$2
+    shift 2
+    [ $# -ge 1 ] || usage
+
+    git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || die 1 "$dir is not a git checkout"
+    git -C "$dir" add -- "$@" || die 1 "cannot stage $* in $dir"
+    if git -C "$dir" diff --cached --quiet; then
+        die 1 "nothing to commit in $dir for: $*"
+    fi
+    git -C "$dir" commit -q -m "$message" || die 1 "commit failed in $dir"
+
+    git -C "$dir" push -q 2>/dev/null && return 0
+
+    # Rejected: someone else pushed first. Rebase our one commit on top and
+    # try once more. A conflict is the author's to resolve — abort and report.
+    if ! git -C "$dir" pull -q --rebase; then
+        gitdir=$(git -C "$dir" rev-parse --absolute-git-dir)
+        if [ -d "$gitdir/rebase-merge" ] || [ -d "$gitdir/rebase-apply" ]; then
+            git -C "$dir" rebase --abort
+            die 1 "rebase conflict in $dir — your commit is kept locally; resolve and push by hand"
+        fi
+        die 1 "pull --rebase failed in $dir — your commit is kept locally"
+    fi
+    git -C "$dir" push -q ||
+        die 1 "push rejected twice from $dir — your commit is kept locally; push by hand"
+}
+
+# --- dispatch -----------------------------------------------------------------
+
+[ $# -ge 1 ] || usage
+command=$1
+shift
+case "$command" in
+    resolve)
+        [ $# -eq 1 ] || usage
+        resolve "$1"
+        ;;
+    commit-push)
+        [ $# -ge 3 ] || usage
+        commit_push "$@"
+        ;;
+    *)
+        usage
+        ;;
+esac

@@ -31,6 +31,7 @@ Developer workflow skills:
 | [**backlog-ops**](plugins/xxthunder-dev-skills/skills/backlog-ops/SKILL.md) | Lifecycle operations on backlog items — pull, tick acceptance/UAT criteria, close with epic-status cascade |
 | [**commit-helper**](plugins/xxthunder-dev-skills/skills/commit-helper/SKILL.md) | Conventional commit creation with mandatory pre-commit checks |
 | [**design-record**](plugins/xxthunder-dev-skills/skills/design-record/SKILL.md) | Durable design record — drafts ADRs with numbering and a derived index, and edits the slotted `architecture.md` |
+| [**learnings**](plugins/xxthunder-dev-skills/skills/learnings/SKILL.md) | Captures what outlives a repository into the author's personal knowledge repo — configured on the machine, never named in any repo — and recalls it at the start of a topic |
 | [**refinement**](plugins/xxthunder-dev-skills/skills/refinement/SKILL.md) | Interactive backlog refinement sessions — review project state, prioritize work, add new items, discuss architecture |
 | [**retrospective**](plugins/xxthunder-dev-skills/skills/retrospective/SKILL.md) | Incident-driven learning — captures lessons from unmet expectations and encodes them into project guidelines |
 
@@ -38,6 +39,11 @@ Beyond skills, `xxthunder-dev-skills` ships a **`SessionStart` hook**. It runs
 at the start of every session and states where that repository keeps its design
 record — the backlog, the ADR log, the architecture document — naming only the
 artifacts that actually exist, with the paths it found them at.
+
+It also ships one plugin-level script, `scripts/store`, which resolves a
+cross-repo store from a variable pair (`<PREFIX>_PATH`, `<PREFIX>_REMOTE`) and
+commits-and-pushes into it. `learnings` uses it with the `LEARNINGS` prefix;
+the store itself is configured in the user's settings, never in a repository.
 
 It is orientation, not enforcement: it never blocks work. It is also **silent in
 repositories that use none of these conventions**, so installing the plugin
@@ -119,6 +125,7 @@ Skills trigger automatically based on conversation context, or can be invoked ex
 - [**backlog-ops**](plugins/xxthunder-dev-skills/skills/backlog-ops/SKILL.md): "start XAS-025", "tick AC 2 on XAS-025", "close XAS-025"
 - [**commit-helper**](plugins/xxthunder-dev-skills/skills/commit-helper/SKILL.md): triggered when creating commits
 - [**design-record**](plugins/xxthunder-dev-skills/skills/design-record/SKILL.md): "record an ADR", "document this decision", "update the architecture doc"
+- [**learnings**](plugins/xxthunder-dev-skills/skills/learnings/SKILL.md): "capture that", "that's a learning", "what do I know about X" — also proposed when the author corrects the agent
 - [**refinement**](plugins/xxthunder-dev-skills/skills/refinement/SKILL.md): "let's refine", "backlog refinement", "what should we work on next?"
 - [**retrospective**](plugins/xxthunder-dev-skills/skills/retrospective/SKILL.md): "I'm not happy with...", "that's wrong", "why did you...?"
 

@@ -8,10 +8,11 @@ Marketplace of agentic skill plugins. Hosts one or more plugins that extend codi
 - `plugins/<plugin-name>/.claude-plugin/plugin.json` — plugin manifest + version
 - `plugins/<plugin-name>/skills/<skill-name>/SKILL.md` — skill definitions
 - `plugins/<plugin-name>/skills/<skill-name>/references/` — supporting material
+- `plugins/<plugin-name>/scripts/` — plugin-level helper scripts shared by several skills (tested under `tests/`)
 - `docs/backlog/` — epics and user stories (prefix `XAS`)
 
 Current plugins:
-- `xxthunder-dev-skills` — dev workflow skills (refinement, retrospective, commit-helper, backlog-ops, design-record, architecture-scan)
+- `xxthunder-dev-skills` — dev workflow skills (refinement, retrospective, commit-helper, backlog-ops, design-record, architecture-scan, learnings)
 - `xxthunder-paperless-skills` — skills for digitizing household paperwork (scan, OCR, merge, file)
 
 Plugins version independently; a change in one plugin only bumps that plugin's version (plus its entry in `marketplace.json`).
