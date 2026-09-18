@@ -15,6 +15,7 @@ flowchart LR
     host["Coding-agent host<br/>(Claude Code)"]
     mkt["xxthunder-agentic-skills<br/>marketplace"]
     consumer["Consuming repositories"]
+    store["Personal knowledge store<br/>(configured per machine)"]
     sp["superpowers<br/>(claude-plugins-official)"]
     naps["NAPS2.Console"]
     ci["GitHub Actions + Codecov"]
@@ -22,15 +23,18 @@ flowchart LR
     dev --> host
     host -->|installs from| mkt
     host -->|acts on| consumer
+    host -->|learnings writes to| store
     mkt -->|dev-skills requires| sp
     host -->|paperless skills drive| naps
     mkt --> ci
 ```
 
 A maintainer works through a coding-agent host. The host installs plugins from
-this marketplace and acts on a consuming repository. `xxthunder-dev-skills`
-declares a hard dependency on `superpowers`, which lives in a different
-marketplace. The paperwork skills drive NAPS2.Console locally. CI runs on
+this marketplace and acts on a consuming repository. Through `learnings` it
+also writes to the maintainer's personal knowledge store — a git repo the host
+knows only from the user's own settings, never from any consuming repository
+(ADR-0007). `xxthunder-dev-skills` declares a hard dependency on `superpowers`,
+which lives in a different marketplace. The paperwork skills drive NAPS2.Console locally. CI runs on
 GitHub Actions with coverage reported to Codecov.
 
 ## Containers
@@ -66,6 +70,8 @@ flowchart TB
         commit["commit-helper"] --> record
         backlog -.at close.-> record
         retro["retrospective"]
+        retro -.what holds beyond.-> learn["learnings"]
+        learn --> storesh["scripts/store"]
         hook["hooks/session-start"]
     end
     subgraph paper["xxthunder-paperless-skills"]
@@ -75,10 +81,21 @@ flowchart TB
     end
 ```
 
-**`xxthunder-dev-skills`** — six skills, all markdown, plus the only
-executable code the plugin ships: a `SessionStart` hook under `hooks/`
-(`hooks.json`, an extensionless `session-start`, and a polyglot `run-hook.cmd`
-that locates a bash on Windows).
+**`xxthunder-dev-skills`** — seven skills, all markdown, plus two pieces of
+executable code: a `SessionStart` hook under `hooks/` (`hooks.json`, an
+extensionless `session-start`, and a polyglot `run-hook.cmd` that locates a
+bash on Windows), and one plugin-level script under `scripts/`.
+
+`scripts/` is the plugin's place for executable helpers **shared by more than
+one skill**; a helper used by a single skill stays in that skill's own
+directory, as the paperless plugin does. Its first and only member is `store`,
+a POSIX sh script reached as `${CLAUDE_PLUGIN_ROOT}/scripts/store`: it
+resolves a cross-repo store from a variable pair (`<PREFIX>_PATH`,
+`<PREFIX>_REMOTE`) and commits-and-pushes into it, with one rebase retry.
+`learnings` calls it with the `LEARNINGS` prefix; the chronicle skill will call
+it with `LOGBOOK`. Mechanics with a right answer live in the script and are
+tested; judgment — running a store's tests for a learning, drafting from its
+template — stays in `SKILL.md`.
 
 Four skills carry a `references/` file. Two of those are load-bearing beyond
 their own skill: `design-record`'s `adr-format.md` and `refinement`'s
@@ -88,14 +105,16 @@ which is why a rule lives in exactly one of them.
 `refinement` and `retrospective` are conversation skills; `backlog-ops` is
 mechanics-only; `design-record` is the sole writer of the record;
 `architecture-scan` is read-only and proposes into it; `commit-helper` sits at
-the boundary of a change.
+the boundary of a change. `learnings` is the one skill whose output leaves the
+consuming repository: it writes to the store and nothing else, under the
+store's own rules (ADR-0008).
 
 **`xxthunder-paperless-skills`** — three skills carrying eight PEP 723 helper
 scripts run via `uv run`: `naps2-scan` (3 scripts), `simplex-merge` (1),
 `split-batch` (4). This is the bulk of the repository's executable code, but no
-longer all of it: the `SessionStart` hook above is shell, and `tests/` is split
-`tests/paperless/` for the helper scripts, `tests/dev/` for the hook and the
-ADR-log invariants.
+longer all of it: the `SessionStart` hook and `scripts/store` above are shell,
+and `tests/` is split `tests/paperless/` for the helper scripts, `tests/dev/`
+for the hook, the store resolver, and the backlog and ADR-log invariants.
 
 ## Key flows
 
@@ -141,6 +160,32 @@ Neither authors content.
 The `SessionStart` hook fires on `startup|clear|compact`, discovers which record
 artifacts exist in the current repository, and injects their locations. It is
 silent in repositories that use none of these conventions.
+
+### Capturing a learning
+
+```mermaid
+sequenceDiagram
+    participant U as Maintainer
+    participant L as learnings
+    participant S as scripts/store
+    participant K as Knowledge store (git)
+    U->>L: correction, "capture", or logbook done
+    L->>S: resolve LEARNINGS
+    S->>K: pull --ff-only / clone
+    S-->>L: store path
+    L->>K: read AGENTS.md → Learnings
+    L->>U: run the store's tests, out loud
+    U->>L: the claim, in the author's words
+    L->>K: write note, add hub line
+    L->>S: commit-push
+    S->>K: push (one rebase retry)
+    L-->>U: path + claim; consuming repo untouched
+```
+
+The store is resolved fresh on every operation and only from the user's
+settings (ADR-0007); its `AGENTS.md` supplies template, hub, tests and language
+(ADR-0008). The claim is never drafted by the agent. `recall` runs the first
+half — resolve, read the contract, search — and writes nothing.
 
 ### Digitising paperwork
 

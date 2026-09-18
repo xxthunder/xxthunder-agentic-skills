@@ -13,6 +13,8 @@ Why this repository looks the way it does. One decision per file, at
 | [0004](0004-always-on-rule-is-orientation-not-enforcement.md) | The always-on rule is orientation, not enforcement | Accepted | 2026-08-12 |
 | [0005](0005-bootstrap-architecture-never-reconstruct-adrs.md) | Bootstrap architecture from code; never reconstruct ADRs | Accepted | 2026-08-12 |
 | [0006](0006-record-locations-are-discovered.md) | Record locations are discovered, not hardcoded | Accepted | 2026-08-18 |
+| [0007](0007-cross-repo-stores-are-configured-not-discovered.md) | Cross-repo stores are configured, not discovered | Accepted | 2026-09-18 |
+| [0008](0008-the-stores-agents-md-is-the-contract.md) | The store's `AGENTS.md` is the contract | Accepted | 2026-09-18 |
 
 ---
 
