@@ -24,7 +24,8 @@
 - [XAS-026e — PR title conventional-commit linter](xas-026e.md)
 - [XAS-026f — Coverage thresholds via `codecov.yml`](xas-026f.md)
 - [XAS-029 — Semantic release via Release Please](xas-029.md)
-- [XAS-034 — `zettelkasten` skill: consult and feed a personal learnings repo from any session](xas-034.md)
+- [XAS-034 — `learnings` skill: capture what outlives a repo into a personal knowledge repo](xas-034.md)
+- [XAS-035 — `logbook` skill: chronicle what each session starts, notes and finishes, across repos](xas-035.md)
 
 ### In Progress
 - [XAS-001 — Backlog refinement](xas-001.md)
