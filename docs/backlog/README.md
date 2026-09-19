@@ -33,7 +33,6 @@
 - [XAS-027 — Agentic Engineering-as-Code — durable design record](xas-027.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
 - [XAS-032 — Establish whether `retrospective` triggers in practice](xas-032.md)
-- [XAS-034 — `learnings` skill: capture what outlives a repo into a personal knowledge repo](xas-034.md)
 
 ### Done
 - [XAS-002 — Rename repo and restructure as agentic-skills marketplace](xas-002.md)
@@ -71,6 +70,7 @@
 - [XAS-030 — Remove `tdd-workflow`](xas-030.md)
 - [XAS-031 — `commit-helper` cites the verification gate instead of restating it](xas-031.md)
 - [XAS-033 — Backlog TOC invariant tests](xas-033.md)
+- [XAS-034 — ✅ DONE - `learnings` skill: capture what outlives a repo into a personal knowledge repo](xas-034.md)
 
 ---
 
