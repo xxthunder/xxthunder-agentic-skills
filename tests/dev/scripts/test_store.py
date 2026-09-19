@@ -23,7 +23,23 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 PLUGIN_ROOT = REPO_ROOT / "plugins" / "xxthunder-dev-skills"
 STORE = PLUGIN_ROOT / "scripts" / "store"
 
-BASH = shutil.which("bash") or "bash"
+
+def resolve_bash() -> str:
+    """Find a real bash, the way `run-hook.cmd` does — see test_session_start.py.
+
+    On the Windows runner a bare `bash` can resolve to the WSL launcher, which
+    exits 1 with a "no installed distributions" notice. Git for Windows first.
+    """
+    for candidate in (
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Program Files (x86)\Git\bin\bash.exe",
+    ):
+        if Path(candidate).is_file():
+            return candidate
+    return shutil.which("bash") or "bash"
+
+
+BASH = resolve_bash()
 
 
 # --- helpers -----------------------------------------------------------------
@@ -81,7 +97,9 @@ def remote(tmp_path: Path, env: dict[str, str]) -> Path:
     subprocess.run(["git", "add", "README.md"], cwd=seed, check=True, env=env)
     subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=seed, check=True, env=env)
     subprocess.run(["git", "push", "-q", "-u", "origin", "main"], cwd=seed, check=True, env=env)
-    shutil.rmtree(seed)
+    # The seed clone stays on disk: shutil.rmtree cannot remove a git object
+    # store on Windows (objects are read-only), and pytest's tmp_path cleanup
+    # handles that case itself. Nothing reads the seed again.
     return bare
 
 
@@ -98,9 +116,7 @@ def push_commit(remote: Path, tmp_path: Path, env: dict[str, str], name: str,
     subprocess.run(["git", "add", filename], cwd=other, check=True, env=env)
     subprocess.run(["git", "commit", "-q", "-m", name], cwd=other, check=True, env=env)
     subprocess.run(["git", "push", "-q"], cwd=other, check=True, env=env)
-    sha = git("rev-parse", "HEAD", cwd=other)
-    shutil.rmtree(other)
-    return sha
+    return git("rev-parse", "HEAD", cwd=other)  # the clone stays; see `remote`
 
 
 def elsewhere(tmp_path: Path) -> Path:
