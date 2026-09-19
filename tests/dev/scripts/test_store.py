@@ -198,6 +198,18 @@ def test_resolve_fails_when_configured_path_cannot_fast_forward(tmp_path, env, r
     assert str(store) in result.stderr
 
 
+def test_resolve_fails_when_configured_path_is_not_a_checkout(tmp_path, env):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    env["LEARNINGS_PATH"] = str(plain)
+
+    result = run_store(["resolve", "LEARNINGS"], cwd=elsewhere(tmp_path), env=env)
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "not a git checkout" in result.stderr
+
+
 def test_resolve_clones_remote_into_cache_when_no_path(tmp_path, env, remote):
     env["LEARNINGS_REMOTE"] = str(remote)
     consuming = elsewhere(tmp_path)

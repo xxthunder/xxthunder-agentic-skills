@@ -37,8 +37,11 @@ die() {
     exit "$code"
 }
 
-physical() {
-    (cd "$1" 2>/dev/null && pwd -P)
+# The root of the checkout at $1, as git spells it. Never `pwd -P`: under Git
+# for Windows that yields an MSYS path (/c/Users/...) while git itself prints
+# C:/Users/..., and the two never compare equal. Empty when $1 is not a checkout.
+toplevel() {
+    git -C "$1" rev-parse --show-toplevel 2>/dev/null
 }
 
 # --- resolve ------------------------------------------------------------------
@@ -51,7 +54,7 @@ resolve() {
     # 1. The current directory is the store. Used as-is: pulling underneath a
     #    session that is already working in the store would move its ground.
     if top=$(git rev-parse --show-toplevel 2>/dev/null); then
-        if [ -n "$path" ] && [ "$(physical "$path")" = "$top" ]; then
+        if [ -n "$path" ] && [ "$(toplevel "$path")" = "$top" ]; then
             printf '%s\n' "$top"
             return 0
         fi
@@ -67,9 +70,11 @@ resolve() {
     # 2. A local checkout is configured and present.
     if [ -n "$path" ]; then
         if [ -d "$path" ]; then
+            root=$(toplevel "$path") || true
+            [ -n "$root" ] || die 1 "${prefix}_PATH=$path is not a git checkout"
             git -C "$path" pull -q --ff-only ||
                 die 1 "cannot fast-forward ${prefix}_PATH=$path — the checkout has diverged from its remote; resolve it by hand"
-            physical "$path"
+            printf '%s\n' "$root"
             return 0
         fi
         printf 'store: %s_PATH=%s does not exist; trying %s_REMOTE\n' "$prefix" "$path" "$prefix" >&2
