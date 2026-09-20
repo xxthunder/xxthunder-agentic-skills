@@ -33,6 +33,24 @@ Use semantic versioning: patch for fixes/wording, minor for behavior changes or 
 
 The rule covers the whole plugin directory, not just `skills/` — hooks under `hooks/` and the manifest itself are shipped to consumers exactly as skills are, and a change to any of them changes what an installer receives.
 
+### Code lands through a pull request
+
+Docs-only changes may be committed to `develop` directly: `docs/`, `README.md`,
+`CONTRIBUTING.md`, this file. **Anything else** — anything under `plugins/`,
+`tests/`, `.github/`, `pyproject.toml`, the manifests — goes on a feature
+branch and reaches `develop` through a pull request, merged by rebase (the
+`develop` ruleset allows no other method) only after **both** matrix jobs,
+`Tests (ubuntu-latest)` and `Tests (windows-latest)`, are green.
+
+A local `uv run --group dev pytest` is Linux-only evidence. Shell scripts,
+hooks and path handling are exactly what differs on Windows, so for them the
+CI matrix is the test, not the local run.
+
+Why this is written here: the ruleset on `develop` requires all of the above,
+but repository admins bypass it silently — a direct push by the maintainer, or
+by an agent acting as the maintainer, is accepted without a word. This rule is
+what protects `develop` on that path.
+
 ### Code changes ship with tests
 
 Executable code in this repo — plugin helper scripts, the `SessionStart` hook —
