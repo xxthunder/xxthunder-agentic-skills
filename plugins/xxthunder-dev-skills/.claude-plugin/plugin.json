@@ -1,7 +1,7 @@
 {
   "name": "xxthunder-dev-skills",
-  "description": "Reusable Claude Code skills: refinement, retrospective, commit-helper, backlog-ops, design-record, architecture-scan, learnings",
-  "version": "2.1.1",
+  "description": "Reusable Claude Code skills: refinement, retrospective, commit-helper, backlog-ops, design-record, architecture-scan, learnings, logbook",
+  "version": "2.2.0",
   "dependencies": [
     {
       "name": "superpowers",
