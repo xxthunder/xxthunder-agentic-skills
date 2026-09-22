@@ -185,7 +185,7 @@ sequenceDiagram
     L->>K: write note, add hub line
     L->>S: commit-push
     S->>K: push (one rebase retry)
-    L-->>U: path + claim; consuming repo untouched
+    L-->>U: path + claim — consuming repo untouched
 ```
 
 The store is resolved fresh on every operation and only from the user's
@@ -208,10 +208,14 @@ sequenceDiagram
     U->>G: start
     G->>S: resolve LOGBOOK
     S-->>G: logbook path
-    G->>K: read AGENTS.md → Logbook; look up address
-    G->>K: started line (none if already open)
-    G->>S: commit-push
-    G-->>U: suggests learnings recall
+    G->>K: read AGENTS.md → Logbook, look up address
+    alt no open started for this address
+        G->>K: started line
+        G->>S: commit-push
+        G-->>U: suggests learnings recall
+    else already started, not done
+        G-->>U: resumption — nothing written
+    end
     U->>B: close ITEM
     B-->>U: suggests logbook done
     U->>G: done
@@ -222,9 +226,10 @@ sequenceDiagram
 
 `backlog-ops` never calls `logbook` and does not know whether one is configured;
 it ends its pull and close with a one-line suggestion. `logbook` resolves the
-logbook fresh (ADR-0007), takes line format, order and address rules from the
-logbook's `AGENTS.md` (ADR-0008), writes one line per commit, and never edits a
-line. A `started` already open for the same address makes `start` a no-op —
+logbook fresh (ADR-0007), takes line format, placement and address rules from
+the logbook's `AGENTS.md` (ADR-0008), commits one line at a time — the log
+file alone, even when the logbook is the working repository — and never edits
+a line. A `started` already open for the same address makes `start` a no-op —
 resumption is not a new start. The capture question at `done` is how
 `learnings` is reached at the end of an item without `backlog-ops` knowing it
 exists.
