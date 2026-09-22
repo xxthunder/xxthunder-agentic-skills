@@ -238,6 +238,28 @@ def test_resolve_reuses_cached_clone_and_pulls(tmp_path, env, remote):
     assert git("rev-parse", "HEAD", cwd=Path(second.stdout.strip())) == newer
 
 
+def test_resolve_names_unpushed_commits_when_cached_clone_cannot_fast_forward(
+    tmp_path, env, remote
+):
+    """After an aborted rebase the cache holds a kept, unpushed commit. The
+    message must say so — never tell the user to delete the clone."""
+    env["LEARNINGS_REMOTE"] = str(remote)
+    first = run_store(["resolve", "LEARNINGS"], cwd=elsewhere(tmp_path), env=env)
+    cache = Path(first.stdout.strip())
+    (cache / "kept.md").write_text("kept locally\n")
+    subprocess.run(["git", "add", "kept.md"], cwd=cache, check=True, env=env)
+    subprocess.run(["git", "commit", "-q", "-m", "kept"], cwd=cache, check=True, env=env)
+    push_commit(remote, tmp_path, env, "theirs")
+
+    result = run_store(["resolve", "LEARNINGS"], cwd=elsewhere(tmp_path), env=env)
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "unpushed" in result.stderr.lower()
+    assert "remove" not in result.stderr.lower()
+    assert git("log", "-1", "--format=%s", cwd=cache) == "kept"
+
+
 def test_resolve_falls_back_to_remote_when_path_is_missing(tmp_path, env, remote):
     env["LEARNINGS_PATH"] = str(tmp_path / "does-not-exist")
     env["LEARNINGS_REMOTE"] = str(remote)
@@ -285,6 +307,39 @@ def test_commit_push_refuses_when_there_is_nothing_to_commit(tmp_path, env, remo
 
     assert result.returncode != 0
     assert "nothing to commit" in result.stderr.lower()
+
+
+def test_commit_push_commits_only_the_named_paths(tmp_path, env, remote):
+    """A session working inside the store may have staged other files (a backlog
+    edit, say). The log commit must not sweep them in."""
+    store = clone(remote, tmp_path / "store", env)
+    (store / "backlog.md").write_text("staged by someone else\n")
+    subprocess.run(["git", "add", "backlog.md"], cwd=store, check=True, env=env)
+    (store / "log.md").write_text("- started\n")
+
+    result = run_store(
+        ["commit-push", str(store), "log: started", "log.md"], cwd=elsewhere(tmp_path), env=env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    committed = git("show", "--stat", "--format=", "--name-only", "HEAD", cwd=store).split()
+    assert committed == ["log.md"]
+    # the other staged change is still there, untouched, for whoever staged it
+    assert git("diff", "--cached", "--name-only", cwd=store) == "backlog.md"
+
+
+def test_commit_push_refuses_when_only_other_files_are_staged(tmp_path, env, remote):
+    store = clone(remote, tmp_path / "store", env)
+    (store / "backlog.md").write_text("staged by someone else\n")
+    subprocess.run(["git", "add", "backlog.md"], cwd=store, check=True, env=env)
+
+    result = run_store(
+        ["commit-push", str(store), "empty", "README.md"], cwd=elsewhere(tmp_path), env=env,
+    )
+
+    assert result.returncode != 0
+    assert "nothing to commit" in result.stderr.lower()
+    assert git("log", "-1", "--format=%s", cwd=store) == "seed"
 
 
 def test_commit_push_retries_once_after_a_rejected_push(tmp_path, env, remote):

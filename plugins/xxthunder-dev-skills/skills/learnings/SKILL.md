@@ -57,15 +57,10 @@ different tool's job and the opposite of "in the author's own words".
 "${CLAUDE_PLUGIN_ROOT}/scripts/store" resolve LEARNINGS
 ```
 
-Prints the store's absolute path on stdout. Its order, first match wins:
-
-1. the current directory *is* the store (it is `LEARNINGS_PATH`, or its `origin`
-   is `LEARNINGS_REMOTE`) → used as-is
-2. `LEARNINGS_PATH` exists → `git pull --ff-only`, then used
-3. `LEARNINGS_REMOTE` is set → cloned once into the user's cache, pulled after
-4. neither → the script says so and exits non-zero
-
-**A non-zero exit ends the operation.** Show the script's message and stop.
+Prints the store's absolute path on stdout. The resolution order — the
+current directory when it is the store, then the local checkout, then a cached
+clone of the remote — is stated once, in the script's own header; do not
+restate or assume it. **A non-zero exit ends the operation.** Show the script's message and stop.
 Never guess a store, never fall back to the current repository, never create
 one. Authentication (SSH keys, `GIT_SSH_COMMAND`) is the environment's
 business — a failed clone or pull is reported, not worked around.
@@ -115,8 +110,9 @@ Fill the template's remaining parts — origin, reasoning, consequence, open
 questions, whatever it offers — and mark those parts as your contribution the
 way the template says (a comment, a section note). Origin means:
 
-- **repo**: the consuming repo's name — the last segment of its `origin` URL,
-  or the checkout's directory name if it has no remote
+- **repo**: the consuming repo's name — the last segment of its `origin` URL
+  without a trailing `.git`, or the checkout's directory name if it has no
+  remote
 - **item**: the backlog item or issue the session was on, if any
 - **date**: today, read from the environment; never made up
 
@@ -132,11 +128,12 @@ the contract says. Then, from the store:
 "${CLAUDE_PLUGIN_ROOT}/scripts/store" commit-push "<store>" "<message>" <note> <hub>
 ```
 
-One commit, pushed immediately — in an ephemeral container an unpushed note
-is not a note. The script retries once after `pull --rebase` when someone
-pushed first; a conflict is aborted and reported, and the commit is kept
-locally for the author. Show its message and stop; do not resolve conflicts in
-the store.
+One commit of exactly these files, pushed immediately — in an ephemeral
+container an unpushed note is not a note. When the store *is* the working
+repository, whatever else is staged there stays staged and untouched. The
+script retries once after `pull --rebase` when someone pushed first; a
+conflict is aborted and reported, and the commit is kept locally for the
+author. Show its message and stop; do not resolve conflicts in the store.
 
 ### Step 7: Report
 

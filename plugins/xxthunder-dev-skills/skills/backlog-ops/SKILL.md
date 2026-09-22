@@ -55,8 +55,6 @@ If the file's `**Status**:` and the README section disagree, **the README wins**
 3. In `README.md`: move the item's TOC line from the `### Open` section to the `### In Progress` section. Preserve the ID-based sort order within the target section.
 4. **Epic cascade**: if the item is a substory (`PREFIX-###<letter>`) and the parent `PREFIX-###` is currently in `### Open`, move the parent to `### In Progress` as well (and update the parent file's `**Status**:` if it carries one). See [references/epic-cascade.md](references/epic-cascade.md).
 5. Report the changes (files touched, old → new status, cascade if any).
-6. End with one line: *Log the start with `logbook start` (chronicle across repos)?* — a
-   suggestion, not a call. This skill does not know whether a logbook is configured.
 
 #### Check (tick an AC/UAT box)
 
@@ -97,15 +95,22 @@ If the file's `**Status**:` and the README section disagree, **the README wins**
    - If **all** siblings (including this item's new Done state) are `Done`, prompt the user: "All substories of `PREFIX-###` are now Done. Close the epic too?" If yes, run the Complete operation recursively on the parent (its ACs still get the same precondition check — an epic may have its own ACs independent of substory completion).
    - Otherwise, leave the parent where it is. If the parent was incorrectly sitting in `### Open` while any substory was `In Progress` or `Done`, correct it to `### In Progress`.
 6. Report: status transition, which section of README was updated, any cascade decisions (accepted or deferred), and whether a binding-design candidate was found and what the user chose.
-7. End with one line: *Log the close with `logbook done`?* — a suggestion, not a call.
-   `logbook done` is also where the question whether anything here outlives the repo
-   is asked; this skill never asks it itself.
 
 ### Step 3: Summarize staged changes
 
 Print a short summary: files edited, lines changed (conceptually — "ticked AC 2", "moved XAS-025 from Open to In Progress"), and any cascade actions. Then remind the user:
 
 > Staged but not committed. Review with `git diff` and commit alongside the related code change (e.g., via `commit-helper`).
+
+Then, after a **pull** or a **complete** only, one last line — a suggestion, never a call:
+
+- after a pull: *Log the start with `logbook start`?*
+- after a complete: *Log the close with `logbook done`?* — naming every item closed in this
+  invocation (a substory and its cascaded epic get one suggestion, not two). `logbook done`
+  is also where the question whether anything outlives the repo is asked; this skill never
+  asks it itself.
+
+This skill does not know whether a logbook is configured; `logbook` finds out and says so.
 
 ## What This Skill Does NOT Do
 

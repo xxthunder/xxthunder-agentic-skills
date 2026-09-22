@@ -128,7 +128,7 @@ Skills trigger automatically based on conversation context, or can be invoked ex
 - [**commit-helper**](plugins/xxthunder-dev-skills/skills/commit-helper/SKILL.md): triggered when creating commits
 - [**design-record**](plugins/xxthunder-dev-skills/skills/design-record/SKILL.md): "record an ADR", "document this decision", "update the architecture doc"
 - [**learnings**](plugins/xxthunder-dev-skills/skills/learnings/SKILL.md): "capture that", "that's a learning", "what do I know about X" — also proposed when the author corrects the agent
-- [**logbook**](plugins/xxthunder-dev-skills/skills/logbook/SKILL.md): "log the start", "note that …", "log the close" — suggested by `backlog-ops` after a pull and after a close
+- [**logbook**](plugins/xxthunder-dev-skills/skills/logbook/SKILL.md): "log the start", "log that …", "log the close" — qualified phrases only; suggested by `backlog-ops` after a pull and after a close
 - [**refinement**](plugins/xxthunder-dev-skills/skills/refinement/SKILL.md): "let's refine", "backlog refinement", "what should we work on next?"
 - [**retrospective**](plugins/xxthunder-dev-skills/skills/retrospective/SKILL.md): "I'm not happy with...", "that's wrong", "why did you...?"
 
