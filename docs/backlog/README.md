@@ -24,6 +24,7 @@
 - [XAS-026e — PR title conventional-commit linter](xas-026e.md)
 - [XAS-026f — Coverage thresholds via `codecov.yml`](xas-026f.md)
 - [XAS-029 — Semantic release via Release Please](xas-029.md)
+- [XAS-036 — Cross-repo stores: the working repository may be the store, and a failed pull says why](xas-036.md)
 
 ### In Progress
 - [XAS-001 — Backlog refinement](xas-001.md)
