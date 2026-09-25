@@ -358,5 +358,5 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 3. Include "why" in the body, not just "what"
 4. Reference issues when applicable
 5. Always co-author AI contributions
-6. Keep subject line under 50 characters
+6. Keep the full subject line at 72 characters or fewer, issue ID included
 7. Use imperative mood in subject line
