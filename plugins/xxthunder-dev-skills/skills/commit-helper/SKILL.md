@@ -100,7 +100,7 @@ Component affected (project-specific, e.g., `api`, `auth`, `cli`, `test`).
 - Imperative mood ("add feature" not "added feature")
 - Lowercase
 - No period at the end
-- Max 50 characters
+- Max 72 characters for the full line — type, scope and issue ID included
 - If a JIRA or GitHub or any other backlog issue with a known id is associated, place the issue ID in parentheses at the end: `<type>(<scope>): <description> (<ISSUE-ID>)`. Omit the parenthesized ID entirely when no tracker item applies — do not commit a literal `<ISSUE-ID>` placeholder.
 
 ### Body (Optional)
