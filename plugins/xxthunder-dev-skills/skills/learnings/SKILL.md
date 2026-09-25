@@ -77,11 +77,13 @@ follow it. It names:
 - the tests a learning has to pass before it is written
 - the language
 - where a capture goes that is not ready yet (see Step 3)
+- optionally, the commit subject of a capture
 
 This skill ships **no template and no tests of its own**. A store that changes
 its format changes its `AGENTS.md`; this plugin does not ship a new version.
 If the section is missing, stop and say what the store has to provide — do not
-improvise a format.
+improvise a format. The one default is the commit subject, for a contract that
+names none; see Step 6.
 
 ## `capture`
 
@@ -122,10 +124,19 @@ the contract allows. Nothing in the consuming repo is created or edited.
 ### Step 6: Write, index, commit, push
 
 Write the note where the contract says. Add its line to the hub or index as
-the contract says. Then, from the store:
+the contract says. Then commit from the store, with the commit subject the
+contract names. When it names none, use `commit-helper`'s conventional format,
+with `learnings` as the scope and the item ID at the end:
+
+```
+docs(learnings): <the claim, shortened> (<ITEM-ID>)
+```
+
+The ID is the one the hub line carries, plain; with none, omit the
+parentheses. Shorten the claim to meet `commit-helper`'s length limit.
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/store" commit-push "<store>" "<message>" <note> <hub>
+"${CLAUDE_PLUGIN_ROOT}/scripts/store" commit-push "<store>" "<subject>" <note> <hub>
 ```
 
 One commit of exactly these files, pushed immediately — in an ephemeral
@@ -169,5 +180,6 @@ One line: the note's path in the store and the claim. Then back to the work.
 - **`retrospective`**: ends at the project's guidelines. When it has run, ask
   whether what it found holds beyond this project — that is a `capture`
   candidate.
-- **`commit-helper`** is not involved. The store's commit is made by the
-  script, in the store; the consuming repo has nothing to commit.
+- **`commit-helper`** owns the default commit subject: its conventional format,
+  with the item ID at the end. It makes no commit here. The script commits, in
+  the store; the consuming repo has nothing to commit.

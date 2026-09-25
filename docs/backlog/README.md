@@ -72,6 +72,7 @@
 - [XAS-033 — Backlog TOC invariant tests](xas-033.md)
 - [XAS-034 — ✅ DONE - `learnings` skill: capture what outlives a repo into a personal knowledge repo](xas-034.md)
 - [XAS-035 — ✅ DONE - `logbook` skill: chronicle what each session starts, notes and finishes, across repos](xas-035.md)
+- [XAS-037 — ✅ DONE - Store commits use conventional subjects, from `commit-helper`](xas-037.md)
 
 ---
 

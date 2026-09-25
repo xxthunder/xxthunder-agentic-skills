@@ -70,11 +70,14 @@ it. It names:
 - how an address is written (`<repo> <ITEM-ID>`) and where repo names resolve
 - how a duplicate `started` is recognised
 - the language
+- optionally, the commit subject of a line
 
 This skill ships **no format, no placement rule and no language of its own**.
 A logbook that changes any of these changes its `AGENTS.md`; this plugin does
 not ship a new version. If the section is missing, or names none of the items
-above, stop and say what the logbook has to provide — do not improvise.
+above, stop and say what the logbook has to provide — do not improvise. The
+one default is the commit subject, for a contract that names none; see
+[Writing a line](#writing-a-line).
 
 ## The address
 
@@ -96,9 +99,17 @@ in what they check first and what they say after.
 2. Compose the line in the contract's format and language.
 3. Insert it **where the contract says** — including a new day heading when
    the contract's order calls for one and today has none yet.
-4. Commit and push that file alone:
+4. Commit and push that file alone, with the commit subject the contract
+   names. When it names none, use `commit-helper`'s conventional format, with
+   `log` as the scope and the item ID at the end:
+   ```
+   docs(log): <event> · <repo> · <text> (<ITEM-ID>)
+   ```
+   `<event>` is the line's event word — `started`, `note` or `done`. The ID is
+   plain, without any link the line gives it. Shorten `<text>` to meet
+   `commit-helper`'s length limit.
    ```bash
-   "${CLAUDE_PLUGIN_ROOT}/scripts/store" commit-push "<logbook>" "log: <type> · <repo> <ITEM-ID> · <text>" <log-file>
+   "${CLAUDE_PLUGIN_ROOT}/scripts/store" commit-push "<logbook>" "<subject>" <log-file>
    ```
    One commit per line, pushed immediately — in an ephemeral container an
    unpushed line is not a line. The script retries once after `pull --rebase`
@@ -157,5 +168,6 @@ in what they check first and what they say after.
   logbook is configured; this skill finds out and says so.
 - **`learnings`**: `start` suggests its `recall`; `done` asks the one question
   whose yes is its `capture`. Two skills, two contracts, possibly one repo.
-- **`commit-helper`** is not involved. The logbook's commit is made by the
-  script, in the logbook; the consuming repo has nothing to commit.
+- **`commit-helper`** owns the default commit subject: its conventional format,
+  with the item ID at the end. It makes no commit here. The script commits, in
+  the logbook; the consuming repo has nothing to commit.
