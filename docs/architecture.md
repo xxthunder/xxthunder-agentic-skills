@@ -75,6 +75,8 @@ flowchart TB
         logb -.done asks.-> learn
         learn --> storesh["scripts/store"]
         logb --> storesh
+        refinement --> backpy["scripts/backlog.py"]
+        backlog --> backpy
         hook["hooks/session-start"]
     end
     subgraph paper["xxthunder-paperless-skills"]
@@ -87,19 +89,23 @@ flowchart TB
 **`xxthunder-dev-skills`** — eight skills, all markdown, plus two pieces of
 executable code: a `SessionStart` hook under `hooks/` (`hooks.json`, an
 extensionless `session-start`, and a polyglot `run-hook.cmd` that locates a
-bash on Windows), and one plugin-level script under `scripts/`.
+bash on Windows), and two plugin-level scripts under `scripts/`.
 
 `scripts/` is the plugin's place for executable helpers **shared by more than
 one skill**; a helper used by a single skill stays in that skill's own
-directory, as the paperless plugin does. Its first and only member is `store`,
-a POSIX sh script reached as `${CLAUDE_PLUGIN_ROOT}/scripts/store`: it
+directory, as the paperless plugin does. `store` is a POSIX sh script
+reached as `${CLAUDE_PLUGIN_ROOT}/scripts/store`: it
 resolves a cross-repo store from a variable pair (`<PREFIX>_PATH`,
 `<PREFIX>_REMOTE`) and commits-and-pushes into it, with one rebase retry.
 `learnings` calls it with the `LEARNINGS` prefix, `logbook` with `LOGBOOK`; the
-two stores may be one repo or two. Mechanics with a right answer live in the
-script and are tested; judgment — running a store's tests for a learning,
-drafting from its template, finding the right place for a log line — stays in
-`SKILL.md`.
+two stores may be one repo or two. `backlog.py` is a PEP 723 Python script
+run with `uv run`; `refinement` and `backlog-ops` call it for every mechanical
+backlog step — allocating an ID, setting a status with its epic cascade,
+regenerating the README table of contents from the item files (ADR-0009), and
+checking the backlog. Mechanics with a right answer live in the scripts and
+are tested; judgment — running a store's tests for a learning, drafting from
+its template, finding the right place for a log line, wording an item — stays
+in `SKILL.md`.
 
 Four skills carry a `references/` file. Two of those are load-bearing beyond
 their own skill: `design-record`'s `adr-format.md` and `refinement`'s
@@ -119,8 +125,9 @@ by suggestion only — one line after a pull, one after a close — the same sea
 scripts run via `uv run`: `naps2-scan` (3 scripts), `simplex-merge` (1),
 `split-batch` (4). This is the bulk of the repository's executable code, but no
 longer all of it: the `SessionStart` hook and `scripts/store` above are shell,
-and `tests/` is split `tests/paperless/` for the helper scripts, `tests/dev/`
-for the hook, the store resolver, and the backlog and ADR-log invariants.
+`scripts/backlog.py` is Python, and `tests/` is split `tests/paperless/` for the
+helper scripts, `tests/dev/` for the hook, the store resolver, the backlog
+script, and the backlog and ADR-log invariants.
 
 ## Key flows
 
@@ -156,8 +163,9 @@ output is applied by `design-record`.
 
 ### Backlog lifecycle
 
-`refinement` authors items; `backlog-ops` performs every status mutation and
-keeps the README table of contents and the epic cascade consistent;
+`refinement` authors items; `backlog-ops` performs every status mutation
+through `scripts/backlog.py`, which applies the epic cascade and regenerates the
+README table of contents from the items;
 `commit-helper` invokes it at commit boundaries.
 Neither authors content.
 

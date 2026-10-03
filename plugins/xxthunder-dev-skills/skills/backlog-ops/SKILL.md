@@ -2,13 +2,20 @@
 name: backlog-ops
 description: "Apply lifecycle operations to a backlog item — pull (Open → In Progress), tick an acceptance or UAT criterion, or close an item (→ Done) with automatic epic-status cascade. Stages file edits only; never produces its own commit. Trigger with: 'start XAS-025', 'pull XAS-025', 'mark AC 2 done on XAS-025', 'tick UAT 1 on XAS-025', 'close XAS-025', 'complete XAS-025'."
 user_invocable: true
+allowed-tools: Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *)
 ---
 
 <!-- Source: https://github.com/xxthunder/xxthunder-agentic-skills/tree/develop/plugins/xxthunder-dev-skills/skills/backlog-ops -->
 
 # Backlog Operations
 
-Mechanical lifecycle operations on a single backlog item: **pull**, **check** (tick an AC/UAT box), **complete**. Every operation keeps the item file and the `README.md` table of contents consistent and respects the epic-status cascade described in [references/epic-cascade.md](references/epic-cascade.md).
+Mechanical lifecycle operations on a single backlog item: **pull**, **check** (tick an AC/UAT box), **complete**. Status changes go through the plugin's backlog script, which writes the item file, applies the epic-status cascade described in [references/epic-cascade.md](references/epic-cascade.md), and regenerates the `README.md` table of contents from the items:
+
+```bash
+uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" <command>
+```
+
+Its commands and output are described in `refinement`'s `references/backlog-format.md` ("The backlog script"). **A non-zero exit ends the operation**: show the script's message and stop.
 
 This skill **stages file edits only**. It never creates a commit. Commits are the user's call (typically via the `commit-helper` skill) so the backlog change can ride in the same commit as the code change that justifies it.
 
@@ -26,7 +33,7 @@ Do **not** trigger on refinement phrases ("let's refine", "add a new story") —
 
 The skill assumes the backlog follows the format documented by the `refinement` skill:
 - One markdown file per item at `docs/backlog/<prefix>-###[<letter>].md` (or equivalent — discover the directory by locating `README.md` in the repo's backlog folder)
-- A `README.md` in the same folder whose `### Open` / `### In Progress` / `### Done` sections list items and are the authoritative status
+- A `README.md` in the same folder whose table of contents is derived from the items; the item's own `**Status**:` line is its status
 - Item headings are `# [PREFIX-###] Title` or `# [PREFIX-###<letter>] Title`
 - Item files carry a `**Status**:` line
 - Acceptance Criteria are GitHub-flavored checkboxes (`- [ ]` / `- [x]`) under a `**Acceptance Criteria**:` heading; optionally also a `**UAT**:` or `**User Acceptance Tests**:` block with the same checkbox syntax
@@ -39,22 +46,19 @@ If any of these invariants look violated, stop and ask the user rather than gues
 
 Given an ID like `XAS-025` or `XAS-003a`:
 
-1. Locate the backlog directory (look for `docs/backlog/README.md`, `BACKLOG.md`, or ask the user).
+1. Locate the backlog directory. The script finds `docs/backlog/` from anywhere inside the repository; for a backlog elsewhere, ask the user and pass `--dir <path>` before the command.
 2. Find the item file — filename is the lowercased ID (`xas-025.md`, `xas-003a.md`).
 3. Read the file. Extract current `**Status**:`, the Acceptance Criteria block, and the UAT block if present.
-4. Read the backlog `README.md` and note which section currently lists the item.
 
-If the file's `**Status**:` and the README section disagree, **the README wins** — treat that as the current status and flag the mismatch so the user can decide whether to resync.
+The item's `**Status**:` line is its current status. The README follows from it; `set-status` and `toc` regenerate it.
 
 ### Step 2: Apply the operation
 
 #### Pull (Open → In Progress)
 
 1. Precondition: current status is `Open`. If already `In Progress`, report that and stop. If `Done`, refuse and ask the user to confirm intent (they may want to re-open, which is a different operation).
-2. In the item file: replace `**Status**: Open` with `**Status**: In Progress`.
-3. In `README.md`: move the item's TOC line from the `### Open` section to the `### In Progress` section. Preserve the ID-based sort order within the target section.
-4. **Epic cascade**: if the item is a substory (`PREFIX-###<letter>`) and the parent `PREFIX-###` is currently in `### Open`, move the parent to `### In Progress` as well (and update the parent file's `**Status**:` if it carries one). See [references/epic-cascade.md](references/epic-cascade.md).
-5. Report the changes (files touched, old → new status, cascade if any).
+2. Run `set-status <ID> "In Progress"`. It writes the item, pulls an `Open` parent epic to `In Progress` along with it, and regenerates the TOC.
+3. Report the script's output lines — one per status change, the cascade included.
 
 #### Check (tick an AC/UAT box)
 
@@ -87,14 +91,9 @@ If the file's `**Status**:` and the README section disagree, **the README wins**
 
    This check **prompts and hands off**. It never authors the ADR itself, and it never blocks the close — declining completes the item as normal. Enforcement is out of scope by design.
 
-3. In the item file:
-   - Replace `**Status**: In Progress` with `**Status**: Done (YYYY-MM-DD)` using today's date (ask the user or read from the environment; never fabricate).
-   - Prefix the top-level heading with `✅ DONE -` if not already present, e.g. `# [XAS-025] Title` → `# [XAS-025] ✅ DONE - Title`.
-4. In `README.md`: move the item's TOC line from its current section to `### Done`. Keep `### Done` sorted by ID.
-5. **Epic cascade**: if the item is a substory, re-evaluate the parent:
-   - If **all** siblings (including this item's new Done state) are `Done`, prompt the user: "All substories of `PREFIX-###` are now Done. Close the epic too?" If yes, run the Complete operation recursively on the parent (its ACs still get the same precondition check — an epic may have its own ACs independent of substory completion).
-   - Otherwise, leave the parent where it is. If the parent was incorrectly sitting in `### Open` while any substory was `In Progress` or `Done`, correct it to `### In Progress`.
-6. Report: status transition, which section of README was updated, any cascade decisions (accepted or deferred), and whether a binding-design candidate was found and what the user chose.
+3. Run `set-status <ID> Done`. It writes `**Status**: Done (YYYY-MM-DD)` dated today from the system clock (pass `--date YYYY-MM-DD` when the user names another day), adds the `✅ DONE -` heading prefix, and regenerates the TOC. It refuses to close an epic while a substory is neither Done nor Superseded.
+4. **Epic cascade**: when the script prints `<PARENT>: every substory is closed; the epic can be closed`, prompt the user: "All substories of `PREFIX-###` are now closed. Close the epic too?" If yes, run the Complete operation on the parent (its ACs still get the same precondition check — an epic may have its own ACs independent of substory completion).
+5. Report: the script's output lines, any cascade decisions (accepted or deferred), and whether a binding-design candidate was found and what the user chose.
 
 ### Step 3: Summarize staged changes
 
@@ -128,7 +127,7 @@ This skill does not know whether a logbook is configured; `logbook` finds out an
 - **Be explicit about cascades.** If moving a substory caused the parent epic to move, say so in the summary.
 - **Refuse ambiguity.** If "mark AC done on XAS-025" doesn't say which AC, ask — don't pick one.
 - **Preserve file formatting.** Don't reflow markdown, renumber lists, or touch anything outside the specific lines the operation requires.
-- **Preserve TOC sort order.** Within each status section, TOC entries are sorted by ID. Insert at the right position, don't append blindly.
+- **The TOC belongs to the script.** Every change to it goes through `set-status` or `toc`; the item files are what you edit.
 - **Never auto-commit.** Always leave the changes staged for the user.
 
 ## Integration Points

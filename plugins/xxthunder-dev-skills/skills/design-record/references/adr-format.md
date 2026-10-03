@@ -118,11 +118,10 @@ When ADR-0009 replaces ADR-0004:
 index and the files disagree, the files win** and the index is regenerated from
 them.
 
-This inverts the rule used by the backlog, whose `README.md` is authoritative.
-The inversion is deliberate: the backlog README carries status that lives
-nowhere else, while this table carries nothing the ADR files do not already
-hold, so treating it as a cache is safe and treating it as a source is a second
-place for the truth to live.
+The backlog follows the same rule: its item files are the truth, and its
+README's table of contents is derived from them. A table that carries nothing
+its files do not already hold is safe to treat as a cache; treating it as a
+source would be a second place for the truth to live.
 
 Index row format:
 

@@ -2,7 +2,7 @@
 
 An **epic** in this backlog convention is any top-level item (`PREFIX-###`) that has at least one substory (`PREFIX-###<letter>`). Epic-ness is emergent — no explicit `Type` field. An item that had no substories becomes an epic the moment the first `<letter>` sibling is created.
 
-The epic's status is **derived** from its substories, not asserted independently. The `backlog-ops` skill keeps the README table-of-contents consistent with this derivation.
+The epic's status is **derived** from its substories, not asserted independently. The backlog script's `set-status` applies the rule; the README table of contents follows from the item files.
 
 ## The Cascade Rule
 
@@ -10,7 +10,7 @@ Given an epic `PREFIX-NNN` and its substories `PREFIX-NNN<a..>`:
 
 | Substory states                                        | Epic status   |
 |--------------------------------------------------------|---------------|
-| All substories `Done`                                  | `Done`        |
+| All substories `Done` or `Superseded`                  | `Done`        |
 | At least one substory `In Progress`                    | `In Progress` |
 | No `In Progress`; mix of `Open` and `Done`             | `In Progress` |
 | All substories `Open`                                  | `Open`        |
@@ -21,9 +21,9 @@ Given an epic `PREFIX-NNN` and its substories `PREFIX-NNN<a..>`:
 
 The `backlog-ops` skill evaluates the cascade in three situations:
 
-1. **After pulling a substory** (`Open` → `In Progress`): if the parent is currently in `### Open`, move it to `### In Progress`.
-2. **After completing a substory** (`In Progress` → `Done`): if all siblings including this one are now `Done`, *prompt* the user to close the epic. Do not close the epic silently — the user may have outstanding epic-level ACs (e.g., a smoke test spanning all substories).
-3. **Drift detection, any operation**: if the parent's current section is inconsistent with the rule (e.g., parent in `### Open` while a substory is `In Progress`), quietly correct it and note the correction in the summary.
+1. **After pulling a substory** (`Open` → `In Progress`): `set-status` moves an `Open` parent to `In Progress` itself and prints the change.
+2. **After completing a substory** (`In Progress` → `Done`): when every sibling is closed, `set-status` prints that the epic can be closed. *Prompt* the user to close it. The user may have outstanding epic-level ACs (e.g., a smoke test spanning all substories), so the epic closes only on a yes.
+3. **Drift detection, any operation**: if the parent's status is inconsistent with the rule (e.g., parent `Open` while a substory is `In Progress`), correct it with `set-status <PARENT> "In Progress"` and note the correction in the summary.
 
 ## Epic-Level ACs vs. Substory Completion
 

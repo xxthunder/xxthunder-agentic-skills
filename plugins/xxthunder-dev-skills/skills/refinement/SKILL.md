@@ -2,6 +2,7 @@
 name: refinement
 description: "Start a backlog refinement session to discuss the project mission, review backlog items, prioritize work, and align on next steps. Also bootstraps the backlog structure in greenfield projects. Trigger with: 'another refinement session', 'let's refine', 'refinement time', 'backlog refinement', or similar requests to discuss project direction and priorities."
 user_invocable: true
+allowed-tools: Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *)
 ---
 
 <!-- Source: https://github.com/xxthunder/xxthunder-agentic-skills/tree/develop/plugins/xxthunder-dev-skills/skills/refinement -->
@@ -44,9 +45,10 @@ When no backlog file is found, create one:
 1. Read **[references/backlog-format.md](references/backlog-format.md)** for the complete format specification
 2. Ask the user where the backlog should live (default: `docs/backlog/`)
 3. Ask the user for a **project ID prefix** — a short uppercase abbreviation of the repo/project name (e.g., `HSH` for HomeSweetHome). Store it in the Notes section of the backlog.
-4. Create `README.md` with the skeleton structure (Status Legend, TOC, empty sections, Notes)
-5. Create the ongoing refinement item (`[PREFIX-001]`) as a separate file and link it in In Progress
-6. Ask the user if they have initial ideas to seed the backlog — draft entries using the format from the reference
+4. Create `README.md` with the skeleton structure (Status Legend, an empty `## Table of Contents`, Notes with the ID prefix)
+5. Create the ongoing refinement item (`[PREFIX-001]`) as a separate file with `**Status**: In Progress`
+6. Run `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" toc` — it writes the table of contents from the item files
+7. Ask the user if they have initial ideas to seed the backlog — draft entries using the format from the reference
 
 **Do NOT commit automatically.** Let the user review via `git diff` first.
 
@@ -104,12 +106,12 @@ Use AskUserQuestion to let the user choose their focus area:
 - Decide whether this is a **top-level item** or a **substory under an existing item**:
   - If the idea naturally belongs under an existing top-level item as one of several related pieces of work, it's a substory — allocate the next letter suffix (`a`, `b`, `c`, …) under that parent.
   - Otherwise it's top-level — allocate the next free three-digit number.
-- Determine the next available ID:
-  - **Top-level**: scan all `prefix-*.md` files, extract the numeric base from each, take the maximum, increment by one.
-  - **Substory of `PREFIX-NNN`**: scan for files matching `prefix-NNN<letter>.md`, take the latest letter used (or none), advance to the next letter.
+- Get the next available ID from the backlog script (see "The backlog script" in the format reference):
+  - **Top-level**: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" next-id`
+  - **Substory of `PREFIX-NNN`**: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" next-id PREFIX-NNN`
 - Draft a backlog entry with all required fields using `[PREFIX-###]` or `[PREFIX-###<letter>]` format (no `**Epic**:` back-reference — the letter suffix encodes the parent)
 - If this is the **first substory** under a top-level item, that item is now implicitly an epic. No rename needed; optionally add a **Substories** list to the parent for readability. The parent's status cascade (see format reference) now governs when it can be marked Done.
-- Add to backlog after user approval
+- After user approval, write the item file, then run `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" toc` — it lists the new item in the README. A non-zero exit from the script ends the step: show its message and stop.
 
 #### Architecture
 - Read relevant source files and architecture docs
