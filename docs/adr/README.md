@@ -15,16 +15,15 @@ Why this repository looks the way it does. One decision per file, at
 | [0006](0006-record-locations-are-discovered.md) | Record locations are discovered, not hardcoded | Accepted | 2026-08-18 |
 | [0007](0007-cross-repo-stores-are-configured-not-discovered.md) | Cross-repo stores are configured, not discovered | Accepted | 2026-09-18 |
 | [0008](0008-the-stores-agents-md-is-the-contract.md) | The store's `AGENTS.md` is the contract | Accepted | 2026-09-18 |
+| [0009](0009-backlog-items-are-the-truth-the-toc-is-derived.md) | Backlog items are the truth; the TOC is derived | Accepted | 2026-10-03 |
 
 ---
 
 ## Notes
 
 - **This index is derived.** Where it disagrees with the files, the files win
-  and the index is regenerated. This inverts the rule used by
-  [the backlog](../backlog/README.md), whose `README.md` is authoritative —
-  deliberately, because that file carries status that lives nowhere else, while
-  this table carries nothing the ADRs do not already hold.
+  and the index is regenerated. [The backlog](../backlog/README.md) follows the
+  same rule since [ADR-0009](0009-backlog-items-are-the-truth-the-toc-is-derived.md).
 - **Numbers are sequential and never reused.** Four digits, zero-padded.
 - **An accepted ADR is immutable.** A changed mind is a new ADR that supersedes
   it. The only permitted edit to an existing ADR is its `**Status**` line at
