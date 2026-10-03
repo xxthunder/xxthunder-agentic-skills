@@ -14,11 +14,14 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PAPERLESS_SKILLS = REPO_ROOT / "plugins" / "xxthunder-paperless-skills" / "skills"
+DEV_SCRIPTS = REPO_ROOT / "plugins" / "xxthunder-dev-skills" / "scripts"
 
 for skill_dir in sorted(PAPERLESS_SKILLS.iterdir()):
     scripts_dir = skill_dir / "scripts"
     if scripts_dir.is_dir():
         sys.path.insert(0, str(scripts_dir))
+
+sys.path.insert(0, str(DEV_SCRIPTS))
 
 
 @pytest.fixture
