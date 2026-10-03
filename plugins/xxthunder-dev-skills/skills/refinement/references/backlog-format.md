@@ -17,11 +17,11 @@ docs/backlog/
 └── prefix-015.md
 ```
 
-`README.md` is the **single source of truth for item status** — an item's status is determined by which section its link appears in.
+The **item files are the single source of truth**: an item's status is its own `**Status**:` line. The README's table of contents is derived from the items by the backlog script and regenerated after every change — see [The backlog script](#the-backlog-script).
 
 ### `README.md`
 
-Contains only metadata and navigation — no item content, no hierarchy groupings. The TOC is flat: each item lives in the section that matches **its own** status — an epic and its substories may sit in different sections at the same time. The letter-suffix ID convention visually groups epic and substory *only within a single section* when sorted by ID.
+Contains only metadata and navigation — no item content, no hierarchy groupings. The TOC is flat: each item lives in the section that matches **its own** status — an epic and its substories may sit in different sections at the same time. The letter-suffix ID convention visually groups epic and substory *only within a single section*, because each section lists the newest ID first.
 
 ```markdown
 # Backlog
@@ -35,14 +35,14 @@ Contains only metadata and navigation — no item content, no hierarchy grouping
 ## Table of Contents
 
 ### Open
-- [PREFIX-003b — Second substory](prefix-003b.md)
-- [PREFIX-003c — Third substory](prefix-003c.md)
 - [PREFIX-015 — Standalone story](prefix-015.md)
+- [PREFIX-003c — Third substory](prefix-003c.md)
+- [PREFIX-003b — Second substory](prefix-003b.md)
 
 ### In Progress
-- [PREFIX-001 — Ongoing refinement](prefix-001.md)
-- [PREFIX-003 — Epic title](prefix-003.md)
 - [PREFIX-003a — First substory (being worked on)](prefix-003a.md)
+- [PREFIX-003 — Epic title](prefix-003.md)
+- [PREFIX-001 — Ongoing refinement](prefix-001.md)
 
 ### Done
 - [PREFIX-002 — Completed item](prefix-002.md)
@@ -58,7 +58,7 @@ Contains only metadata and navigation — no item content, no hierarchy grouping
 
 Note in the example above: `PREFIX-003` is an In-Progress epic. One of its substories (`PREFIX-003a`) has been pulled and appears next to the epic in `### In Progress`. The other two substories (`PREFIX-003b`, `PREFIX-003c`) are still `Open` and sit in `### Open`. This is the normal state while an epic is being worked through — substories scatter across sections as they transition individually.
 
-**No "Stories under X" groupings.** Each item sorts into the section its own status dictates; ID-sorting within a section is enough to keep related IDs visually adjacent when they happen to share a status.
+**No "Stories under X" groupings.** Each item sorts into the section its own status dictates; newest-first ID order within a section keeps related IDs adjacent when they happen to share a status.
 
 ### Item files
 
@@ -83,6 +83,26 @@ As a [user role], I want [feature] so that [benefit].
 - [ ] All existing tests continue to pass
 ```
 
+## The backlog script
+
+Every mechanical step goes through one script that ships with this plugin. It needs `uv` on PATH.
+
+```bash
+uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" <command>
+```
+
+| Command | What it does |
+|---------|--------------|
+| `next-id` | Prints the next free top-level ID; the prefix comes from the README's Notes |
+| `next-id PREFIX-NNN` | Prints the next substory ID under `PREFIX-NNN` |
+| `set-status ID STATUS` | Sets `Open`, `"In Progress"`, `Done` or `Superseded` — status line, date, heading marker, epic cascade — and regenerates the TOC |
+| `toc` | Regenerates the README's table of contents from the items |
+| `check` | Lists every problem in the backlog, one per line; exit 1 if there is one |
+
+Run it from anywhere inside the repository; it finds `docs/backlog/` by walking up. For a backlog elsewhere, put `--dir <path>` before the command.
+
+**A non-zero exit ends the operation.** Show the script's message to the user and stop. The fix belongs in the item the message names, or — when the message names a README line — in moving that line out of the table of contents.
+
 ## Item ID Convention
 
 Two shapes of ID:
@@ -105,9 +125,9 @@ Examples:
 
 ### Allocating the next ID
 
-**New top-level item**: scan all `prefix-*.md` files, extract the three-digit base number from each, take the maximum, increment by one.
+**New top-level item**: `next-id`. It takes the highest number among the backlog's own prefix and adds one.
 
-**New substory under `PREFIX-NNN`**: scan for files matching `prefix-NNN<letter>.md`, take the latest letter used (or none), advance to the next letter (`a` if none yet). If the parent is currently a standalone story, no rename is needed — adding the first substory implicitly promotes it.
+**New substory under `PREFIX-NNN`**: `next-id PREFIX-NNN`. It advances past the latest letter used, or starts at `a`. If the parent is currently a standalone story, no rename is needed — adding the first substory implicitly promotes it.
 
 ### Back-reference fields (do not use)
 
@@ -119,7 +139,7 @@ Do **not** add a `**Epic**: PREFIX-###` field inside substory files. The letter 
 
 | Field                  | Description                                              |
 |------------------------|----------------------------------------------------------|
-| **Status**             | `Open`, `In Progress`, or `Done (YYYY-MM-DD)` |
+| **Status**             | `Open`, `In Progress`, `Done (YYYY-MM-DD)`, or `Superseded (YYYY-MM-DD)` for an item replaced by another |
 | **Priority**           | `High`, `Medium`, `Low`, or `—` (none)                  |
 | **Component**          | File path(s) affected (e.g., `roles/ssl-certify/`)       |
 | **Summary**            | User story: "As a [user], I want [feature] so that [benefit]" |
@@ -139,7 +159,7 @@ Do **not** add a `**Epic**: PREFIX-###` field inside substory files. The letter 
 
 ### Epic-only content
 
-A top-level item that has (or will have) substories may include a narrative **Substories** section listing the children by ID and title. This is purely informative — the substory status comes from the README TOC, not from this list. Keep it as a bulleted list of `PREFIX-###<letter> — title` entries.
+A top-level item that has (or will have) substories may include a narrative **Substories** section listing the children by ID and title. This is purely informative — each substory's status is its own `**Status**:` line, not this list. Keep it as a bulleted list of `PREFIX-###<letter> — title` entries.
 
 ### Open entry
 
@@ -182,24 +202,30 @@ File: `prefix-001.md`
 [... all other fields with all acceptance criteria checked ...]
 ```
 
-### TOC entry format (in `README.md`)
+### TOC format (in `README.md`)
+
+`toc` writes the block under `## Table of Contents`, up to the next `## ` heading or `---` rule:
+
+- **Sections in a fixed order**: `### Open`, `### In Progress`, `### Done`, then `### Superseded` only when an item has that status.
+- **Newest ID first** in every section. The sort key is prefix, then number, then letter, so an epic sits below its own substories and a legacy prefix forms a block of its own.
+- **One line per item**: `- [ID — title](file)`, the title taken from the item heading without the `✅ DONE -` marker. Nothing else goes on the line; what an item needs to say, it says in its own file.
 
 ```markdown
 ### Open
-- [HSH-003c — Third substory (still open)](hsh-003c.md)
 - [HSH-015 — Brief title](hsh-015.md)
+- [HSH-003c — Third substory (still open)](hsh-003c.md)
 
 ### In Progress
-- [HSH-001 — Backlog refinement](hsh-001.md)
-- [HSH-003 — Epic title](hsh-003.md)
 - [HSH-003a — First substory (being worked on)](hsh-003a.md)
+- [HSH-003 — Epic title](hsh-003.md)
+- [HSH-001 — Backlog refinement](hsh-001.md)
 
 ### Done
-- [HSH-002 — Completed item](hsh-002.md)
 - [HSH-003b — Second substory (finished)](hsh-003b.md)
+- [HSH-002 — Completed item](hsh-002.md)
 ```
 
-An epic and its substories are not constrained to share a section. Each row sits in the section for **its own** status.
+An epic and its substories are not constrained to share a section. Each row sits in the section for **its own** status. Anything else in the block — a note, a checklist — makes `toc` refuse; it belongs below the table of contents.
 
 ## Plans Versus Items
 
@@ -237,7 +263,7 @@ An epic has no status of its own in the usual sense — its status is derived fr
 
 **Practical rule:** an epic stays out of `Done` as long as any substory is not `Done`.
 
-When a substory transitions, the epic's status in `README.md` should be re-evaluated and moved to the appropriate section if it changed. The `backlog-ops` skill handles this cascade automatically; manual edits should follow the same rule.
+`set-status` applies the cascade: a substory leaving `Open` pulls an `Open` epic to `In Progress`, and an epic cannot be set `Done` while a substory is neither `Done` nor `Superseded`. When the last substory closes, the script says so; closing the epic is the user's call.
 
 An epic may also carry its own acceptance criteria (e.g., "End-to-end smoke test passes across all substories"). Those are checked independently. Avoid redundant ACs like "Child stories X/Y/Z completed" — substory completion is tracked by the cascade, not by a checkbox.
 
@@ -261,13 +287,10 @@ Ongoing backlog refinement — create, review, clarify, and update user stories.
 
 ```
 Open → In Progress → Done
+                   ↘ Superseded (replaced by another item)
 ```
 
-When changing an item's status:
-1. Move the link in `README.md` to the correct section — this is the authoritative status
-2. Update the `**Status**` field inside the item file
-3. For done items: add date and `✅ DONE -` prefix to heading
-4. If the item is a substory, re-evaluate and adjust the parent epic's section per the cascade rule above
+Change a status with `set-status ID STATUS`. It writes the `**Status**` line (dated today for `Done` and `Superseded`), adds or removes the `✅ DONE -` heading prefix, applies the epic cascade above, and regenerates the TOC.
 
 No file moves needed — all items stay in the same folder.
 
