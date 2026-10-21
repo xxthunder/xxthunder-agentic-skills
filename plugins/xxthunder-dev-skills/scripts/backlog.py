@@ -10,8 +10,14 @@ this script; the skills call it instead of editing the TOC by hand.
 from __future__ import annotations
 
 import argparse
+import io
 import re
+import subprocess
 import sys
+import tarfile
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -19,6 +25,7 @@ from pathlib import Path
 ITEM_FILE_RE = re.compile(r"^([a-z]+)-(\d{3})([a-z]?)\.md$")
 HEADING_RE = re.compile(r"^#\s+\[([A-Z]+-\d{3}[a-z]?)\]\s*(.*)$", re.M)
 STATUS_RE = re.compile(r"^\*\*Status\*\*:[ \t]*(.+?)[ \t]*$", re.M)
+PRIORITY_RE = re.compile(r"^\*\*Priority\*\*:[ \t]*(.+?)[ \t]*$", re.M)
 TOC_LINE_RE = re.compile(r"^\s*- \[.*?\]\(([a-z]+-\d{3}[a-z]?\.md)\)")
 PREFIX_NOTE_RE = re.compile(r"\*\*ID prefix\*\*:\s*`([A-Z]+)`")
 DATE_RE = re.compile(r"\((.+)\)$")
@@ -31,6 +38,8 @@ SECTIONS = ("Open", "In Progress", "Done", "Superseded")
 ALWAYS_SHOWN = ("Open", "In Progress", "Done")
 CLOSED = ("Done", "Superseded")
 TOC_HEADING = "## Table of Contents"
+BACKLOG_IN_REPO = "docs/backlog"
+REMOTE = "origin"
 
 
 class BacklogError(Exception):
@@ -44,6 +53,7 @@ class Item:
     title: str
     status: str
     marked: bool
+    priority: str | None = None
 
     @property
     def sort_key(self) -> tuple[str, int, str]:
@@ -76,13 +86,14 @@ def parse_item(path: Path) -> Item:
     text, _ = read_text(path)
     heading = HEADING_RE.search(text)
     status = STATUS_RE.search(text)
+    priority = PRIORITY_RE.search(text)
     if heading is None:
         raise BacklogError(f"{path.name}: no '# [PREFIX-###] Title' heading")
     if status is None:
         raise BacklogError(f"{path.name}: no '**Status**:' line")
     title = heading.group(2).removeprefix(DONE_MARK)
     marked = heading.group(2).startswith(DONE_MARK)
-    return Item(path, heading.group(1), title, status.group(1), marked)
+    return Item(path, heading.group(1), title, status.group(1), marked, priority.group(1) if priority else None)
 
 
 def load_items(backlog: Path) -> list[Item]:
@@ -176,11 +187,38 @@ def next_id(backlog: Path, parent: str | None = None) -> str:
     return f"{parent.upper()}{following}"
 
 
-def find_item(backlog: Path, item_id: str) -> Item:
+def item_path(backlog: Path, item_id: str) -> Path:
     path = backlog / f"{item_id.lower()}.md"
     if not ITEM_FILE_RE.match(path.name) or not path.is_file():
         raise BacklogError(f"{item_id}: no such item")
-    return parse_item(path)
+    return path
+
+
+def find_item(backlog: Path, item_id: str) -> Item:
+    return parse_item(item_path(backlog, item_id))
+
+
+def show(backlog: Path, ids: list[str]) -> tuple[list[str], list[str]]:
+    """One `ID<TAB>status<TAB>priority<TAB>title` line per item, and one problem per
+    ID that names no item or item that does not parse.
+
+    Without *ids*, every item, oldest first. Read-only; a missing priority prints as `—`.
+    """
+    lines, problems = [], []
+    paths = []
+    for item_id in ids:
+        try:
+            paths.append(item_path(backlog, item_id))
+        except BacklogError as e:
+            problems.append(str(e))
+    for path in paths if ids else item_files(backlog):
+        try:
+            item = parse_item(path)
+        except BacklogError as e:
+            problems.append(str(e))
+            continue
+        lines.append(f"{item.id}\t{item.status}\t{item.priority or '—'}\t{item.title}")
+    return lines, problems
 
 
 def substories(items: list[Item], epic: Item) -> list[Item]:
@@ -305,6 +343,31 @@ def check(backlog: Path) -> list[str]:
     return problems
 
 
+def git(repo: Path, *args: str) -> bytes:
+    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True)
+    if result.returncode != 0:
+        said = result.stderr.decode("utf-8", "replace").strip().splitlines()
+        raise BacklogError(f"{repo}: git {args[0]}: {said[0] if said else f'exit {result.returncode}'}")
+    return result.stdout
+
+
+@contextmanager
+def remote_backlog(repo: Path) -> Iterator[Path]:
+    """The backlog of *repo* as its remote's default branch has it now (ADR-0010).
+
+    Fetches, sets `origin/HEAD` from the remote — a fetch does not — and exports
+    `docs/backlog/` at that ref into a temporary directory, removed afterwards.
+    The working tree, index and `HEAD` of *repo* stay as they were.
+    """
+    git(repo, "fetch", "-q", REMOTE)
+    git(repo, "remote", "set-head", REMOTE, "--auto")
+    archive = git(repo, "archive", "--format=tar", f"{REMOTE}/HEAD", BACKLOG_IN_REPO)
+    with tempfile.TemporaryDirectory() as tmp:
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            tar.extractall(tmp, filter="data")
+        yield Path(tmp) / BACKLOG_IN_REPO
+
+
 def find_backlog(start: Path) -> Path:
     """The nearest `docs/backlog/` with a README, from *start* upwards."""
     for d in [start, *start.parents]:
@@ -313,11 +376,22 @@ def find_backlog(start: Path) -> Path:
     raise BacklogError(f"no docs/backlog/README.md above {start}; name the directory with --dir")
 
 
+def print_show(lines: list[str], problems: list[str]) -> int:
+    for line in lines:
+        print(line)
+    for problem in problems:
+        print(f"backlog: {problem}", file=sys.stderr)
+    return 1 if problems else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dir", type=Path, help="backlog directory (default: docs/backlog/ of this repository)")
+    where = parser.add_mutually_exclusive_group()
+    where.add_argument("--dir", type=Path, help="backlog directory (default: docs/backlog/ of this repository)")
+    where.add_argument("--repo", type=Path, help="read the backlog of the repository at REPO as its remote's default "
+                       "branch has it, after a fetch; its working tree stays untouched (show only)")
     sub = parser.add_subparsers(dest="command", required=True)
     p_next = sub.add_parser("next-id", help="print the next free ID, or the next substory ID under PARENT")
     p_next.add_argument("parent", nargs="?")
@@ -327,9 +401,16 @@ def main(argv: list[str] | None = None) -> int:
     p_set.add_argument("--date", default=date.today().isoformat(), help="date for Done or Superseded (default: today)")
     sub.add_parser("toc", help="rewrite the README table of contents from the items")
     sub.add_parser("check", help="list every problem in the backlog; exit 1 if there is one")
+    p_show = sub.add_parser("show", help="print ID, status, priority and title of the items, tab-separated; all without IDs")
+    p_show.add_argument("ids", nargs="*")
     args = parser.parse_args(argv)
 
     try:
+        if args.repo:
+            if args.command != "show":
+                raise BacklogError(f"--repo reads another repository; it serves show only, not {args.command}")
+            with remote_backlog(args.repo) as b:
+                return print_show(*show(b, args.ids))
         b = args.dir or find_backlog(Path.cwd())
         if args.command == "next-id":
             print(next_id(b, args.parent))
@@ -338,6 +419,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(message)
         elif args.command == "toc":
             write_toc(b)
+        elif args.command == "show":
+            return print_show(*show(b, args.ids))
         else:
             problems = check(b)
             for problem in problems:
