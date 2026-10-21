@@ -29,7 +29,6 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
-- [XAS-040 — `next` skill: what is in progress and what comes next, across repos, on a keyword](xas-040.md)
 - [XAS-032 — Establish whether `retrospective` triggers in practice](xas-032.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
 - [XAS-027 — Agentic Engineering-as-Code — durable design record](xas-027.md)
@@ -38,6 +37,7 @@
 - [XAS-001 — Backlog refinement](xas-001.md)
 
 ### Done
+- [XAS-040 — `next` skill: what is in progress and what comes next, across repos, on a keyword](xas-040.md)
 - [XAS-039 — Derive the backlog TOC from the items](xas-039.md)
 - [XAS-037 — Store commits use conventional subjects, from `commit-helper`](xas-037.md)
 - [XAS-035 — `logbook` skill: chronicle what each session starts, notes and finishes, across repos](xas-035.md)
