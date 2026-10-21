@@ -7,6 +7,7 @@ hand, never computed by the script under test.
 """
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -533,6 +534,189 @@ def test_check_reports_a_stale_toc_next_to_other_problems(tmp_path):
     ]
 
 
+# ---------- show ----------
+
+
+def with_priority(b: Path, iid: str, priority: str) -> None:
+    """Add a `**Priority**:` line under the status of an item written by make_backlog."""
+    path = b / f"{iid.lower()}.md"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("\n\nBody.", f"\n**Priority**: {priority}\n\nBody."), encoding="utf-8", newline="\n")
+
+
+def test_show_prints_id_status_priority_and_title_in_the_order_asked(tmp_path):
+    b = make_backlog(tmp_path, [
+        ("SC-001", "First", "Open"),
+        ("SC-002", "Second", "In Progress"),
+    ])
+    with_priority(b, "SC-001", "High")
+    with_priority(b, "SC-002", "Low")
+
+    lines, missing = backlog.show(b, ["SC-002", "SC-001"])
+
+    assert lines == ["SC-002\tIn Progress\tLow\tSecond", "SC-001\tOpen\tHigh\tFirst"]
+    assert missing == []
+
+
+def test_show_without_ids_prints_every_item_oldest_first(tmp_path):
+    b = make_backlog(tmp_path, [
+        ("SC-002", "Second", "Open"),
+        ("SC-001", "First", "Open"),
+        ("SC-001a", "Sub", "Open"),
+    ])
+
+    lines, _ = backlog.show(b, [])
+
+    assert [line.split("\t")[0] for line in lines] == ["SC-001", "SC-001a", "SC-002"]
+
+
+def test_show_prints_a_dash_for_an_item_without_priority(tmp_path):
+    b = make_backlog(tmp_path, [("SC-001", "First", "Open")])
+
+    lines, _ = backlog.show(b, ["SC-001"])
+
+    assert lines == ["SC-001\tOpen\t—\tFirst"]
+
+
+def test_show_keeps_the_status_date_and_drops_the_done_marker(tmp_path):
+    b = make_backlog(tmp_path, [("SC-001", "First", "Done (2026-01-02)")])
+    with_priority(b, "SC-001", "High (prerequisite for SC-007)")
+
+    lines, _ = backlog.show(b, ["SC-001"])
+
+    assert lines == ["SC-001\tDone (2026-01-02)\tHigh (prerequisite for SC-007)\tFirst"]
+
+
+def test_show_names_the_ids_that_resolve_to_no_item(tmp_path):
+    b = make_backlog(tmp_path, [("SC-001", "First", "Open")])
+
+    lines, problems = backlog.show(b, ["SC-009", "SC-001", "nonsense"])
+
+    assert lines == ["SC-001\tOpen\t—\tFirst"]
+    assert problems == ["SC-009: no such item", "nonsense: no such item"]
+
+
+def test_show_reports_an_unreadable_item_as_unreadable_not_as_missing(tmp_path):
+    b = make_backlog(tmp_path, [("SC-001", "First", "Open"), ("SC-002", "Second", "Open")])
+    write_item(b, "SC-001", "# [SC-001] First\n\nNo status line.\n")
+
+    lines, problems = backlog.show(b, ["SC-001", "SC-002"])
+
+    assert lines == ["SC-002\tOpen\t—\tSecond"]
+    assert problems == ["sc-001.md: no '**Status**:' line"]
+
+
+def test_show_without_ids_prints_every_readable_item_and_names_the_rest(tmp_path):
+    b = make_backlog(tmp_path, [
+        ("SC-001", "First", "Open"),
+        ("SC-002", "Second", "Open"),
+        ("SC-003", "Third", "In Progress"),
+    ])
+    write_item(b, "SC-002", "No heading.\n\n**Status**: Open\n")
+
+    lines, problems = backlog.show(b, [])
+
+    assert lines == ["SC-001\tOpen\t—\tFirst", "SC-003\tIn Progress\t—\tThird"]
+    assert problems == ["sc-002.md: no '# [PREFIX-###] Title' heading"]
+
+
+# ---------- another repository, read at its remote's default branch ----------
+
+
+def git(cwd: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", *args],
+        cwd=cwd, capture_output=True, check=True,
+    )
+    return result.stdout.decode("utf-8")
+
+
+def publish(upstream: Path, message: str) -> None:
+    git(upstream, "add", "-A")
+    git(upstream, "commit", "-q", "-m", message)
+    git(upstream, "push", "-q", "origin", "HEAD")
+
+
+@pytest.fixture
+def remote(tmp_path):
+    """A bare remote whose default branch is `trunk`, and an upstream working copy that pushes to it."""
+    bare = tmp_path / "remote.git"
+    git(tmp_path, "init", "-q", "--bare", "-b", "trunk", str(bare))
+    upstream = tmp_path / "upstream"
+    upstream.mkdir()
+    git(upstream, "init", "-q", "-b", "trunk")
+    git(upstream, "remote", "add", "origin", str(bare))
+    make_backlog(upstream, [("SC-001", "First", "Open"), ("SC-002", "Second", "Open")])
+    publish(upstream, "items")
+    return bare, upstream
+
+
+def state(checkout: Path) -> tuple[str, str, str]:
+    return git(checkout, "rev-parse", "HEAD"), git(checkout, "status", "--porcelain"), git(checkout, "branch", "--show-current")
+
+
+def test_repo_reads_the_items_the_remote_default_branch_has_now(tmp_path, remote, capsys):
+    bare, upstream = remote
+    git(tmp_path, "clone", "-q", str(bare), "checkout")
+    checkout = tmp_path / "checkout"
+    git(checkout, "switch", "-q", "-c", "feature")
+    write_item(checkout / "docs" / "backlog", "SC-002", item_text("SC-002", "Second", "In Progress"))
+    write_item(upstream / "docs" / "backlog", "SC-001", item_text("SC-001", "First", "Done (2026-10-21)"))
+    publish(upstream, "close SC-001")
+    before = state(checkout)
+
+    assert backlog.main(["--repo", str(checkout), "show", "SC-001", "SC-002"]) == 0
+
+    assert capsys.readouterr().out == "SC-001\tDone (2026-10-21)\t—\tFirst\nSC-002\tOpen\t—\tSecond\n"
+    assert state(checkout) == before
+
+
+def test_repo_finds_the_default_branch_where_origin_head_was_never_set(tmp_path, remote, capsys):
+    bare, _ = remote
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    git(checkout, "init", "-q", "-b", "local")
+    git(checkout, "remote", "add", "origin", str(bare))
+
+    assert backlog.main(["--repo", str(checkout), "show"]) == 0
+
+    assert capsys.readouterr().out == "SC-001\tOpen\t—\tFirst\nSC-002\tOpen\t—\tSecond\n"
+
+
+def test_repo_without_a_backlog_on_the_default_branch_fails_with_a_message(tmp_path, remote, capsys):
+    bare, upstream = remote
+    git(upstream, "rm", "-q", "-r", "docs")
+    publish(upstream, "no backlog")
+    git(tmp_path, "clone", "-q", str(bare), "checkout")
+
+    assert backlog.main(["--repo", str(tmp_path / "checkout"), "show"]) == 1
+
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert err.startswith("backlog: ") and "docs/backlog" in err
+
+
+def test_repo_without_a_remote_fails_with_a_message(tmp_path, capsys):
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    git(checkout, "init", "-q")
+
+    assert backlog.main(["--repo", str(checkout), "show"]) == 1
+
+    err = capsys.readouterr().err
+    assert err.startswith("backlog: ") and "'origin'" in err
+
+
+@pytest.mark.parametrize("command", [["toc"], ["set-status", "SC-001", "Done"], ["next-id"], ["check"]])
+def test_repo_serves_show_only(tmp_path, remote, capsys, command):
+    bare, _ = remote
+    git(tmp_path, "clone", "-q", str(bare), "checkout")
+
+    assert backlog.main(["--repo", str(tmp_path / "checkout"), *command]) == 1
+
+    assert "--repo" in capsys.readouterr().err
+
+
 # ---------- command line ----------
 
 SCRIPT = Path(backlog.__file__)
@@ -551,6 +735,18 @@ def test_cli_next_id_prints_the_id(tmp_path, capsys):
     assert backlog.main(["--dir", str(b), "next-id"]) == 0
     assert backlog.main(["--dir", str(b), "next-id", "SC-003"]) == 0
     assert capsys.readouterr().out == "SC-004\nSC-003a\n"
+
+
+def test_cli_show_prints_the_items_and_fails_on_a_missing_one(tmp_path, capsys):
+    b = make_backlog(tmp_path, [("SC-001", "First", "Open")])
+
+    assert backlog.main(["--dir", str(b), "show", "SC-001"]) == 0
+    assert capsys.readouterr().out == "SC-001\tOpen\t—\tFirst\n"
+
+    assert backlog.main(["--dir", str(b), "show", "SC-001", "SC-009"]) == 1
+    out, err = capsys.readouterr()
+    assert out == "SC-001\tOpen\t—\tFirst\n"
+    assert err == "backlog: SC-009: no such item\n"
 
 
 def test_cli_set_status_prints_what_changed(tmp_path, capsys):
