@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-041 — `backlog-ops` pull: In Progress lands on the default branch at once](xas-041.md)
 - [XAS-040 — `next` skill: what is in progress and what comes next, across repos, on a keyword](xas-040.md)
 - [XAS-038 — Make a feature branch ready to merge](xas-038.md)
 - [XAS-036 — Cross-repo stores: the working repository may be the store, and a failed pull says why](xas-036.md)
