@@ -33,6 +33,7 @@ Developer workflow skills:
 | [**design-record**](plugins/xxthunder-dev-skills/skills/design-record/SKILL.md) | Durable design record — drafts ADRs with numbering and a derived index, and edits the slotted `architecture.md` |
 | [**learnings**](plugins/xxthunder-dev-skills/skills/learnings/SKILL.md) | Captures what outlives a repository into the author's personal knowledge repo — configured on the machine, never named in any repo — and recalls it at the start of a topic |
 | [**logbook**](plugins/xxthunder-dev-skills/skills/logbook/SKILL.md) | Chronicles what each session starts, notes and finishes into the author's logbook repo — one line per event, across all repositories; suggested by `backlog-ops` at pull and close |
+| [**next**](plugins/xxthunder-dev-skills/skills/next/SKILL.md) | Shows what is in progress and what comes next across all repositories — one ranked list in the logbook's store, each item's status and priority read fresh from its own backlog at `origin/HEAD` |
 | [**refinement**](plugins/xxthunder-dev-skills/skills/refinement/SKILL.md) | Interactive backlog refinement sessions — review project state, prioritize work, add new items, discuss architecture |
 | [**retrospective**](plugins/xxthunder-dev-skills/skills/retrospective/SKILL.md) | Incident-driven learning — captures lessons from unmet expectations and encodes them into project guidelines |
 
@@ -44,7 +45,7 @@ artifacts that actually exist, with the paths it found them at.
 It also ships one plugin-level script, `scripts/store`, which resolves a
 cross-repo store from a variable pair (`<PREFIX>_PATH`, `<PREFIX>_REMOTE`) and
 commits-and-pushes into it. `learnings` uses it with the `LEARNINGS` prefix,
-`logbook` with `LOGBOOK`; the stores themselves are configured in the user's
+`logbook` and `next` with `LOGBOOK`; the stores themselves are configured in the user's
 settings, never in a repository, and may be one repo or two.
 
 It is orientation, not enforcement: it never blocks work. It is also **silent in
@@ -129,6 +130,7 @@ Skills trigger automatically based on conversation context, or can be invoked ex
 - [**design-record**](plugins/xxthunder-dev-skills/skills/design-record/SKILL.md): "record an ADR", "document this decision", "update the architecture doc"
 - [**learnings**](plugins/xxthunder-dev-skills/skills/learnings/SKILL.md): "capture that", "that's a learning", "what do I know about X" — also proposed when the author corrects the agent
 - [**logbook**](plugins/xxthunder-dev-skills/skills/logbook/SKILL.md): "log the start", "log that …", "log the close" — qualified phrases only; suggested by `backlog-ops` after a pull and after a close
+- [**next**](plugins/xxthunder-dev-skills/skills/next/SKILL.md): "/next", "what's next", "was steht an" — about the work across repos; "put HSH-089 next", "drop X from the next list"
 - [**refinement**](plugins/xxthunder-dev-skills/skills/refinement/SKILL.md): "let's refine", "backlog refinement", "what should we work on next?"
 - [**retrospective**](plugins/xxthunder-dev-skills/skills/retrospective/SKILL.md): "I'm not happy with...", "that's wrong", "why did you...?"
 

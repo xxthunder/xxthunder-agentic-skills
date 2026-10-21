@@ -23,15 +23,15 @@ flowchart LR
     dev --> host
     host -->|installs from| mkt
     host -->|acts on| consumer
-    host -->|learnings, logbook write to| store
+    host -->|learnings, logbook, next write to| store
     mkt -->|dev-skills requires| sp
     host -->|paperless skills drive| naps
     mkt --> ci
 ```
 
 A maintainer works through a coding-agent host. The host installs plugins from
-this marketplace and acts on a consuming repository. Through `learnings` and
-`logbook` it also writes to the maintainer's personal knowledge store and
+this marketplace and acts on a consuming repository. Through `learnings`,
+`logbook` and `next` it also writes to the maintainer's personal knowledge store and
 logbook — git repos (one or two) the host knows only from the user's own
 settings, never from any consuming repository (ADR-0007). `xxthunder-dev-skills` declares a hard dependency on `superpowers`,
 which lives in a different marketplace. The paperwork skills drive NAPS2.Console locally. CI runs on
@@ -73,6 +73,9 @@ flowchart TB
         retro -.what holds beyond.-> learn["learnings"]
         backlog -.suggests start/done.-> logb["logbook"]
         logb -.done asks.-> learn
+        logb -.done suggests drop.-> nxt["next"]
+        nxt --> storesh
+        nxt --> backpy
         learn --> storesh["scripts/store"]
         logb --> storesh
         refinement --> backpy["scripts/backlog.py"]
@@ -86,7 +89,7 @@ flowchart TB
     end
 ```
 
-**`xxthunder-dev-skills`** — eight skills, all markdown, plus two pieces of
+**`xxthunder-dev-skills`** — nine skills, all markdown, plus two pieces of
 executable code: a `SessionStart` hook under `hooks/` (`hooks.json`, an
 extensionless `session-start`, and a polyglot `run-hook.cmd` that locates a
 bash on Windows), and two plugin-level scripts under `scripts/`.
@@ -97,12 +100,15 @@ directory, as the paperless plugin does. `store` is a POSIX sh script
 reached as `${CLAUDE_PLUGIN_ROOT}/scripts/store`: it
 resolves a cross-repo store from a variable pair (`<PREFIX>_PATH`,
 `<PREFIX>_REMOTE`) and commits-and-pushes into it, with one rebase retry.
-`learnings` calls it with the `LEARNINGS` prefix, `logbook` with `LOGBOOK`; the
-two stores may be one repo or two. `backlog.py` is a PEP 723 Python script
+`learnings` calls it with the `LEARNINGS` prefix, `logbook` and `next` with
+`LOGBOOK`; the two stores may be one repo or two. `backlog.py` is a PEP 723 Python script
 run with `uv run`; `refinement` and `backlog-ops` call it for every mechanical
 backlog step — allocating an ID, setting a status with its epic cascade,
 regenerating the README table of contents from the item files (ADR-0009), and
-checking the backlog. Mechanics with a right answer live in the scripts and
+checking the backlog. `next` calls its one read-only command, `show`, which
+prints an item's ID, status, priority and title — with `--repo`, for another
+repository, read at its remote's default branch without touching its working
+tree. Mechanics with a right answer live in the scripts and
 are tested; judgment — running a store's tests for a learning, drafting from
 its template, finding the right place for a log line, wording an item — stays
 in `SKILL.md`.
@@ -115,11 +121,12 @@ which is why a rule lives in exactly one of them.
 `refinement` and `retrospective` are conversation skills; `backlog-ops` is
 mechanics-only; `design-record` is the sole writer of the record;
 `architecture-scan` is read-only and proposes into it; `commit-helper` sits at
-the boundary of a change. `learnings` and `logbook` are the two skills whose
+the boundary of a change. `learnings`, `logbook` and `next` are the three skills whose
 output leaves the consuming repository: they write to their store and nothing
 else, under the store's own rules (ADR-0008). `backlog-ops` reaches `logbook`
 by suggestion only — one line after a pull, one after a close — the same seam
-`commit-helper` uses towards `design-record`.
+`commit-helper` uses towards `design-record`; `logbook` reaches `next` the same
+way, suggesting a `drop` after `done`.
 
 **`xxthunder-paperless-skills`** — three skills carrying eight PEP 723 helper
 scripts run via `uv run`: `naps2-scan` (3 scripts), `simplex-merge` (1),
@@ -241,6 +248,42 @@ a line. A `started` already open for the same address makes `start` a no-op —
 resumption is not a new start. The capture question at `done` is how
 `learnings` is reached at the end of an item without `backlog-ops` knowing it
 exists.
+
+### What comes next
+
+```mermaid
+sequenceDiagram
+    participant U as Maintainer
+    participant N as next
+    participant S as scripts/store
+    participant K as Store (git)
+    participant R as Repo on the list
+    participant P as scripts/backlog.py
+    U->>N: /next
+    N->>S: resolve LOGBOOK
+    S-->>N: store path (pulled)
+    N->>K: read AGENTS.md → Next, the list, the open starts in the log
+    loop each repo named
+        alt not cloned
+            N-->>U: clone it? — no leaves it out
+        end
+        N->>P: --repo checkout show
+        P->>R: fetch, set origin/HEAD, read docs/backlog there
+        P-->>N: ID, status, priority, title
+    end
+    N-->>U: in progress, next, contradictions
+    U->>N: put ITEM after OTHER
+    N->>K: list renumbered, commit-push
+```
+
+The list holds only the order; status, priority and title are read from each
+item every time. A repo on the list is fetched and read at `origin/HEAD`, never
+pulled, by `backlog.py` (ADR-0010): another session may be working in that checkout, and its working tree,
+index and `HEAD` stay as they were. Only the store is pulled, by the resolver,
+because the list is written there. Line format, checkout location and the
+in-progress source come from the store's `AGENTS.md` (ADR-0008). `show`
+reports contradictions between list, backlogs and log rather than smoothing
+them over, and writes nothing.
 
 ### Digitising paperwork
 
