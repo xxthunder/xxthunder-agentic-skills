@@ -10,7 +10,6 @@
 
 ### Open
 - [XAS-041 — `backlog-ops` pull: In Progress lands on the default branch at once](xas-041.md)
-- [XAS-040 — `next` skill: what is in progress and what comes next, across repos, on a keyword](xas-040.md)
 - [XAS-038 — Make a feature branch ready to merge](xas-038.md)
 - [XAS-036 — Cross-repo stores: the working repository may be the store, and a failed pull says why](xas-036.md)
 - [XAS-029 — Semantic release via Release Please](xas-029.md)
@@ -30,6 +29,7 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
+- [XAS-040 — `next` skill: what is in progress and what comes next, across repos, on a keyword](xas-040.md)
 - [XAS-032 — Establish whether `retrospective` triggers in practice](xas-032.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
 - [XAS-027 — Agentic Engineering-as-Code — durable design record](xas-027.md)
