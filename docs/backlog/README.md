@@ -29,7 +29,6 @@
 
 ### In Progress
 - [XAS-043 — `backlog.py` drops text after the link in a table-of-contents line](xas-043.md)
-- [XAS-041 — `backlog-ops` pull: In Progress lands on the default branch at once](xas-041.md)
 - [XAS-032 — Establish whether `retrospective` triggers in practice](xas-032.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
 - [XAS-027 — Agentic Engineering-as-Code — durable design record](xas-027.md)
@@ -39,6 +38,7 @@
 
 ### Done
 - [XAS-042 — `next` does not report the standing refinement item](xas-042.md)
+- [XAS-041 — `backlog-ops` pull: In Progress lands on the default branch at once](xas-041.md)
 - [XAS-040 — `next` skill: what is in progress and what comes next, across repos, on a keyword](xas-040.md)
 - [XAS-039 — Derive the backlog TOC from the items](xas-039.md)
 - [XAS-037 — Store commits use conventional subjects, from `commit-helper`](xas-037.md)
