@@ -106,9 +106,10 @@ run with `uv run`; `refinement` and `backlog-ops` call it for every mechanical
 backlog step — allocating an ID, setting a status with its epic cascade,
 regenerating the README table of contents from the item files (ADR-0009), and
 checking the backlog. `next` calls its one read-only command, `show`, which
-prints an item's ID, status, priority and title — with `--repo`, for another
-repository, read at its remote's default branch without touching its working
-tree. Mechanics with a right answer live in the scripts and
+prints an item's ID, status, priority and title — with `--in-progress`, only
+the items In Progress as work, epics and the standing refinement item left
+out; with `--repo`, for another repository, read at its remote's default
+branch without touching its working tree. Mechanics with a right answer live in the scripts and
 are tested; judgment — running a store's tests for a learning, drafting from
 its template, finding the right place for a log line, wording an item — stays
 in `SKILL.md`.
@@ -270,6 +271,8 @@ sequenceDiagram
         N->>P: --repo checkout show
         P->>R: fetch, set origin/HEAD, read docs/backlog there
         P-->>N: ID, status, priority, title
+        N->>P: --repo checkout show --in-progress
+        P-->>N: the items In Progress as work
     end
     N-->>U: in progress, next, contradictions
     U->>N: put ITEM after OTHER
@@ -281,7 +284,9 @@ item every time. A repo on the list is fetched and read at `origin/HEAD`, never
 pulled, by `backlog.py` (ADR-0010): another session may be working in that checkout, and its working tree,
 index and `HEAD` stay as they were. Only the store is pulled, by the resolver,
 because the list is written there. Line format, checkout location and the
-in-progress source come from the store's `AGENTS.md` (ADR-0008). `show`
+in-progress source come from the store's `AGENTS.md` (ADR-0008); so the
+script says which items are In Progress as work, and the skill compares them
+with the log. `show`
 reports contradictions between list, backlogs and log rather than smoothing
 them over, and writes nothing.
 
