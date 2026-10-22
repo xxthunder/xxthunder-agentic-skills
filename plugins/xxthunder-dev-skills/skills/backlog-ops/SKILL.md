@@ -1,6 +1,6 @@
 ---
 name: backlog-ops
-description: "Apply lifecycle operations to a backlog item — pull (Open → In Progress), tick an acceptance or UAT criterion, or close an item (→ Done) with automatic epic-status cascade. Stages file edits only; never produces its own commit. Trigger with: 'start XAS-025', 'pull XAS-025', 'mark AC 2 done on XAS-025', 'tick UAT 1 on XAS-025', 'close XAS-025', 'complete XAS-025'."
+description: "Apply lifecycle operations to a backlog item — pull (Open → In Progress), tick an acceptance or UAT criterion, or close an item (→ Done) with automatic epic-status cascade. Stages file edits and never produces its own commit; a pull is handed to commit-helper for the default branch. Trigger with: 'start XAS-025', 'pull XAS-025', 'mark AC 2 done on XAS-025', 'tick UAT 1 on XAS-025', 'close XAS-025', 'complete XAS-025'."
 user_invocable: true
 allowed-tools: Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *)
 ---
@@ -17,7 +17,7 @@ uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" <command>
 
 Its commands and output are described in `refinement`'s `references/backlog-format.md` ("The backlog script"). **A non-zero exit ends the operation**: show the script's message and stop.
 
-This skill **stages file edits only**. It never creates a commit. Commits are the user's call (typically via the `commit-helper` skill) so the backlog change can ride in the same commit as the code change that justifies it.
+This skill **edits and stages files**; it never creates a commit itself. A **pull** is the one operation that reaches the default branch at once: it is handed to `commit-helper` for a commit of its own, and pushed ([Pull](#pull-open--in-progress), steps 4–5). A check or a complete stays staged for the user, who commits it on the feature branch — a ticked criterion with the code it claims, a close as the branch's last commit.
 
 ## When This Skill Triggers
 
@@ -56,9 +56,19 @@ The item's `**Status**:` line is its current status. The README follows from it;
 
 #### Pull (Open → In Progress)
 
-1. Precondition: current status is `Open`. If already `In Progress`, report that and stop. If `Done`, refuse and ask the user to confirm intent (they may want to re-open, which is a different operation).
+1. Precondition: current status is `Open`. On the default branch, bring it up to date first — `git fetch`, then `git merge --ff-only @{u}`, which keeps whatever else is staged — so the status read is the one other sessions see. If already `In Progress`, report that and stop. If `Done`, refuse and ask the user to confirm intent (they may want to re-open, which is a different operation).
 2. Run `set-status <ID> "In Progress"`. It writes the item, pulls an `Open` parent epic to `In Progress` along with it, and regenerates the TOC.
 3. Report the script's output lines — one per status change, the cascade included.
+4. **Decide where the pull lands.** *In Progress* says that someone is working on the item, and other sessions read it on the default branch — so it lands there at once, in a commit of its own, before any feature branch exists (step 5). It stays staged for the feature branch instead, and the report names the reason, when:
+   - the repository's `AGENTS.md` / `CLAUDE.md` sends backlog or docs changes through a pull request — name that rule;
+   - the checkout is on another branch than the default branch, such as a feature branch or its worktree;
+   - the repository has no remote.
+5. **Land it on the default branch:**
+   1. Stage exactly the files the script changed: the item, an epic the cascade moved, and the README.
+   2. Hand off to `commit-helper` for one commit `docs(backlog): pull <ID>` that holds those files and nothing else that is staged — commit them by path (`git commit -m "…" -- <files>`).
+   3. Push it. A push rejected as non-fast-forward: `git pull --rebase --autostash`, then push once more; other changes that were staged come back unstaged — say so.
+   4. When `commit-helper` makes no commit, or the remote refuses the push for any other reason — a protected branch, a hook — the pull stays staged for the feature branch, and the report quotes the message. If the pull commit was made, undo it with `git reset --soft HEAD~1`, so the default branch matches its remote again.
+   5. The feature branch for the work starts from the pushed commit.
 
 #### Check (tick an AC/UAT box)
 
@@ -97,9 +107,9 @@ The item's `**Status**:` line is its current status. The README follows from it;
 
 ### Step 3: Summarize staged changes
 
-Print a short summary: files edited, lines changed (conceptually — "ticked AC 2", "moved XAS-025 from Open to In Progress"), and any cascade actions. Then remind the user:
+Print a short summary: files edited, lines changed (conceptually — "ticked AC 2", "moved XAS-025 from Open to In Progress"), and any cascade actions. After a pull, name the commit and the push — or why the pull stayed staged. After a check or a complete, remind the user:
 
-> Staged but not committed. Review with `git diff` and commit alongside the related code change (e.g., via `commit-helper`).
+> Staged but not committed. Review with `git diff --cached` and commit it on the feature branch via `commit-helper` — a ticked criterion with the code it claims, a close as the branch's last commit.
 
 Then, after a **pull** or a **complete** only, one last line — a suggestion, never a call:
 
@@ -113,7 +123,7 @@ This skill does not know whether a logbook is configured; `logbook` finds out an
 
 ## What This Skill Does NOT Do
 
-- **No commits.** Ever. The backlog edit rides in the user's next commit.
+- **No commits of its own.** A pull is handed to `commit-helper` (Pull, step 5); every other backlog edit is committed by the user on the feature branch.
 - **No new items.** Creating items is `refinement`'s job.
 - **No AC authoring.** Editing AC text is `refinement`'s job.
 - **No ADR authoring.** The binding-design check names a candidate and hands off. `design-record` is the record's only writer.
@@ -128,12 +138,12 @@ This skill does not know whether a logbook is configured; `logbook` finds out an
 - **Refuse ambiguity.** If "mark AC done on XAS-025" doesn't say which AC, ask — don't pick one.
 - **Preserve file formatting.** Don't reflow markdown, renumber lists, or touch anything outside the specific lines the operation requires.
 - **The TOC belongs to the script.** Every change to it goes through `set-status` or `toc`; the item files are what you edit.
-- **Never auto-commit.** Always leave the changes staged for the user.
+- **Done lands with the code.** A check or a complete stays staged for the user, so *Done* and every ticked criterion reach the default branch with the work they claim.
 
 ## Integration Points
 
 - **Boundary transitions come from this skill's own triggers** — "start XAS-025" at the beginning of a unit of work, "tick AC 2 on XAS-025" as criteria are met, "close XAS-025" at the end. No other skill needs to drive them, and none should auto-check ACs mid-flight: only the user knows which criterion a given change satisfied.
-- **`commit-helper`** commits the staged backlog edit alongside the code change. Mention the backlog ID in the commit subject or body per conventional-commit practice.
+- **`commit-helper`** commits a pull on its own, on the default branch, at once; it commits every other staged backlog edit on the feature branch — a ticked criterion with its code, a close as the last commit. Mention the backlog ID in the commit subject or body per conventional-commit practice.
 - **`refinement`** hands off to this skill for any status mutation; it does not edit `**Status**:` fields directly.
 - **`design-record`** receives the hand-off from the binding-design check on Complete. Closing an item is the last moment to lift design that outlives it into the ADR log, because nothing keeps a closed item current.
 - **`logbook`** is suggested — one line, never invoked — after a pull and after a close, so a

@@ -69,6 +69,7 @@ flowchart TB
         scan["architecture-scan"] -.proposes.-> record
         commit["commit-helper"] --> record
         backlog -.at close.-> record
+        backlog -.hands pull to.-> commit
         retro["retrospective"]
         retro -.what holds beyond.-> learn["learnings"]
         backlog -.suggests start/done.-> logb["logbook"]
@@ -174,8 +175,37 @@ output is applied by `design-record`.
 `refinement` authors items; `backlog-ops` performs every status mutation
 through `scripts/backlog.py`, which applies the epic cascade and regenerates the
 README table of contents from the items;
-`commit-helper` invokes it at commit boundaries.
+`commit-helper` commits what it stages.
 Neither authors content.
+
+A pull and a close land in different places, because they claim different
+things. *In Progress* says that someone is working on the item: the pull is
+committed on its own to the default branch and pushed before the feature branch
+exists, so other sessions and `next` see it at `origin/HEAD`. *Done* says that
+the default branch contains the work: the close stays the last commit on the
+feature branch, and the merge closes the item.
+
+```mermaid
+sequenceDiagram
+    participant U as Maintainer
+    participant B as backlog-ops
+    participant C as commit-helper
+    participant D as Default branch
+    participant F as Feature branch
+    U->>B: pull ID
+    B->>C: staged pull, alone
+    C->>D: docs(backlog): pull ID, pushed
+    D->>F: branch from the pushed pull
+    U->>C: code
+    C->>F: feat/fix … (ID)
+    U->>B: close ID
+    B->>C: staged close
+    C->>F: docs(backlog): close ID, last commit
+    F->>D: merge closes the item
+```
+
+Where the repository's rules send backlog changes through a pull request, or
+the push is refused, the pull stays staged and rides on the feature branch.
 
 ### Session orientation
 

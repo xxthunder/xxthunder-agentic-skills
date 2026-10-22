@@ -86,7 +86,7 @@ if [ -n "$arch_doc" ]; then
     payload="$payload$nl- Architecture: $arch_doc — the living picture of how this system is put together."
 fi
 
-payload="$payload$nl${nl}Who writes it: the \`design-record\` skill authors ADRs and edits the architecture document. \`architecture-scan\` derives structure from the code and proposes; it never writes. \`backlog-ops\` handles item lifecycle. All of them stage edits and leave committing to you."
+payload="$payload$nl${nl}Who writes it: the \`design-record\` skill authors ADRs and edits the architecture document. \`architecture-scan\` derives structure from the code and proposes; it never writes. \`backlog-ops\` handles item lifecycle. All of them stage edits and leave committing to you, except a \`backlog-ops\` pull, which is committed on the default branch at once."
 
 payload="$payload$nl${nl}If \`superpowers:brainstorming\` reaches its spec-writing step, the design belongs in the backlog item — not in a \`docs/superpowers/specs/\` file. A per-story spec duplicates the item that should already carry that design, and the duplicate drifts from it."
 
