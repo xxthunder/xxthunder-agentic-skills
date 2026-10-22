@@ -117,8 +117,8 @@ Then **contradictions — reported, never smoothed over**:
 - an item that `show --in-progress` prints without an open start in the
   in-progress source
 - an open start in the in-progress source whose item is not *In Progress* —
-  *Open* (most often pulled on a feature branch, so the default branch does
-  not show it yet), *Done* or *Superseded*
+  *Open* (not pulled, or pulled on a feature branch because the default
+  branch takes no direct push), *Done* or *Superseded*
 - an address that resolves to no item, or a repo name missing from the
   registry the contract names
 - an item that does not parse, with the script's message
