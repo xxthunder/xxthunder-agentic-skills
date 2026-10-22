@@ -33,6 +33,7 @@ LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 CODE_RE = re.compile(r"^```.*?^```|`[^`\n]+`", re.M | re.S)
 SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 DONE_MARK = "✅ DONE - "
+OTHER_DONE_MARK_RE = re.compile(r"^(?:✅\s*)?(?:DONE|COMPLETED)\s*[-—–:]\s*")
 
 SECTIONS = ("Open", "In Progress", "Done", "Superseded")
 ALWAYS_SHOWN = ("Open", "In Progress", "Done")
@@ -101,6 +102,10 @@ def load_items(backlog: Path) -> list[Item]:
     return [parse_item(p) for p in item_files(backlog)]
 
 
+def toc_line(item: Item) -> str:
+    return f"- [{item.id} — {item.title}]({item.path.name})"
+
+
 def render_toc(items: list[Item]) -> str:
     """The TOC block body: one section per status, newest ID first."""
     by_section: dict[str, list[Item]] = {name: [] for name in SECTIONS}
@@ -112,7 +117,7 @@ def render_toc(items: list[Item]) -> str:
         if not members and name not in ALWAYS_SHOWN:
             continue
         out.append(f"### {name}\n")
-        out.extend(f"- [{i.id} — {i.title}]({i.path.name})\n" for i in members)
+        out.extend(f"{toc_line(i)}\n" for i in members)
         out.append("\n")
     return "".join(out)
 
@@ -130,16 +135,22 @@ def toc_block(lines: list[str]) -> tuple[int, int]:
     return start, end
 
 
-def check_block_is_derived(lines: list[str], start: int, end: int, backlog: Path) -> None:
+def check_block_is_derived(lines: list[str], start: int, end: int, backlog: Path, items: list[Item]) -> None:
     """Refuse any line in the TOC block that no item produces."""
     headings = {f"### {name}" for name in SECTIONS}
+    rendered = {toc_line(i) for i in items}
     for n in range(start, end):
         line = lines[n]
-        if not line.strip() or line in headings:
+        if not line.strip() or line in headings or line.strip() in rendered:
             continue
         link = TOC_LINE_RE.match(line)
         if link and (backlog / link.group(1)).is_file():
-            continue
+            if not line[link.end():].strip():
+                continue
+            raise BacklogError(
+                f"README.md:{n + 1}: {line!r} carries text after its link, which the table of "
+                "contents does not keep; move the text into the item or below the table of contents"
+            )
         raise BacklogError(
             f"README.md:{n + 1}: {line!r} is not derived from an item; "
             "move it out of the table of contents"
@@ -151,10 +162,11 @@ def derived_readme(backlog: Path) -> tuple[str, str, bool]:
     current, crlf = read_text(backlog / "README.md")
     lines = current.split("\n")
     start, end = toc_block(lines)
-    check_block_is_derived(lines, start, end, backlog)
+    items = load_items(backlog)
+    check_block_is_derived(lines, start, end, backlog, items)
     head = "\n".join(lines[:start]) + "\n\n"
     tail = "\n".join(lines[end:])
-    return current, head + render_toc(load_items(backlog)) + tail, crlf
+    return current, head + render_toc(items) + tail, crlf
 
 
 def write_toc(backlog: Path) -> None:
@@ -318,6 +330,11 @@ def check_item(item: Item) -> list[str]:
             problems.append(f"{item.path.name}: date {m.group(1)!r} does not parse")
     if item.marked and section != "Done":
         problems.append(f"{item.path.name}: heading marked DONE but status is {item.status!r}")
+    other_mark = OTHER_DONE_MARK_RE.match(item.title)
+    if other_mark:
+        problems.append(
+            f"{item.path.name}: heading starts with {other_mark.group(0)!r}, not the done marker {DONE_MARK!r}"
+        )
     return problems
 
 
