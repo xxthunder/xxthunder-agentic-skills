@@ -40,6 +40,7 @@ CLOSED = ("Done", "Superseded")
 TOC_HEADING = "## Table of Contents"
 BACKLOG_IN_REPO = "docs/backlog"
 REMOTE = "origin"
+REFINEMENT_TITLE = "Backlog refinement"
 
 
 class BacklogError(Exception):
@@ -198,14 +199,30 @@ def find_item(backlog: Path, item_id: str) -> Item:
     return parse_item(item_path(backlog, item_id))
 
 
-def show(backlog: Path, ids: list[str]) -> tuple[list[str], list[str]]:
+def epics(backlog: Path) -> set[tuple[str, str]]:
+    """(prefix, number) of every item that has a substory, read from the file names."""
+    return {(prefix, number) for prefix, number, letter in
+            (ITEM_FILE_RE.match(p.name).groups() for p in item_files(backlog)) if letter}
+
+
+def is_work_in_progress(item: Item, epics: set[tuple[str, str]]) -> bool:
+    """In Progress as work someone started: not an epic, which is In Progress
+    because a substory is, and not the standing refinement item, which never closes."""
+    prefix, number, letter = ITEM_FILE_RE.match(item.path.name).groups()
+    epic = not letter and (prefix, number) in epics
+    return item.status == "In Progress" and not epic and item.title != REFINEMENT_TITLE
+
+
+def show(backlog: Path, ids: list[str], in_progress: bool = False) -> tuple[list[str], list[str]]:
     """One `ID<TAB>status<TAB>priority<TAB>title` line per item, and one problem per
     ID that names no item or item that does not parse.
 
     Without *ids*, every item, oldest first. Read-only; a missing priority prints as `—`.
+    With *in_progress*, only the items that are work in progress (`is_work_in_progress`).
     """
     lines, problems = [], []
     paths = []
+    with_substories = epics(backlog) if in_progress else set()
     for item_id in ids:
         try:
             paths.append(item_path(backlog, item_id))
@@ -216,6 +233,8 @@ def show(backlog: Path, ids: list[str]) -> tuple[list[str], list[str]]:
             item = parse_item(path)
         except BacklogError as e:
             problems.append(str(e))
+            continue
+        if in_progress and not is_work_in_progress(item, with_substories):
             continue
         lines.append(f"{item.id}\t{item.status}\t{item.priority or '—'}\t{item.title}")
     return lines, problems
@@ -403,6 +422,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("check", help="list every problem in the backlog; exit 1 if there is one")
     p_show = sub.add_parser("show", help="print ID, status, priority and title of the items, tab-separated; all without IDs")
     p_show.add_argument("ids", nargs="*")
+    p_show.add_argument("--in-progress", action="store_true",
+                        help="only items In Progress as work: no epic, no standing refinement item")
     args = parser.parse_args(argv)
 
     try:
@@ -410,7 +431,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.command != "show":
                 raise BacklogError(f"--repo reads another repository; it serves show only, not {args.command}")
             with remote_backlog(args.repo) as b:
-                return print_show(*show(b, args.ids))
+                return print_show(*show(b, args.ids, args.in_progress))
         b = args.dir or find_backlog(Path.cwd())
         if args.command == "next-id":
             print(next_id(b, args.parent))
@@ -420,7 +441,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "toc":
             write_toc(b)
         elif args.command == "show":
-            return print_show(*show(b, args.ids))
+            return print_show(*show(b, args.ids, args.in_progress))
         else:
             problems = check(b)
             for problem in problems:

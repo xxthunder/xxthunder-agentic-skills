@@ -42,7 +42,7 @@ Contains only metadata and navigation — no item content, no hierarchy grouping
 ### In Progress
 - [PREFIX-003a — First substory (being worked on)](prefix-003a.md)
 - [PREFIX-003 — Epic title](prefix-003.md)
-- [PREFIX-001 — Ongoing refinement](prefix-001.md)
+- [PREFIX-001 — Backlog refinement](prefix-001.md)
 
 ### Done
 - [PREFIX-002 — Completed item](prefix-002.md)
@@ -98,6 +98,8 @@ uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" <command>
 | `set-status ID STATUS` | Sets `Open`, `"In Progress"`, `Done` or `Superseded` — status line, date, heading marker, epic cascade — and regenerates the TOC |
 | `toc` | Regenerates the README's table of contents from the items |
 | `check` | Lists every problem in the backlog, one per line; exit 1 if there is one |
+| `show [ID…]` | Prints ID, status, priority and title of the items, tab-separated; every item without IDs. Read-only |
+| `show --in-progress [ID…]` | Only the items In Progress as work: an epic and the ongoing refinement item are left out |
 
 Run it from anywhere inside the repository; it finds `docs/backlog/` by walking up. For a backlog elsewhere, put `--dir <path>` before the command.
 
@@ -269,7 +271,7 @@ An epic may also carry its own acceptance criteria (e.g., "End-to-end smoke test
 
 ## Ongoing Refinement Item
 
-Every backlog should include an ongoing refinement item that is never completed. All refinement commits reference this ID:
+Every backlog should include an ongoing refinement item that is never completed. All refinement commits reference this ID. Keep its title *Backlog refinement*: `backlog.py show --in-progress` recognises the item by it.
 
 File: `prefix-0xx.md`
 
