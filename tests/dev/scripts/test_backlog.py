@@ -130,17 +130,50 @@ def test_toc_takes_the_title_from_the_heading_without_the_done_marker(tmp_path):
     assert "- [SC-001 — Finished thing](sc-001.md)\n" in readme(b)
 
 
-def test_toc_drops_notes_carried_on_an_item_line(tmp_path):
-    b = make_backlog(
-        tmp_path,
-        [("SC-001", "Old plan", "Superseded (2026-07-10)"), ("SC-002", "New plan", "Open")],
-        toc="### Superseded\n\n- [SC-001 — Old plan](sc-001.md) — replaced by [SC-002](sc-002.md)\n\n",
-    )
+ANNOTATED = [("SC-036b", "Old plan", "Superseded (2026-07-10)"),
+             ("SC-036f", "New part", "Open"), ("SC-040", "New plan", "Open")]
+ANNOTATED_TOC = ("### Superseded\n\n"
+                 "- [SC-036b — Old plan](sc-036b.md) — replaced by [SC-040](sc-040.md) + [SC-036f](sc-036f.md)\n\n")
+
+
+def test_toc_refuses_a_line_with_text_after_its_link_and_leaves_the_readme_alone(tmp_path):
+    b = make_backlog(tmp_path, ANNOTATED, toc=ANNOTATED_TOC)
+    before = readme(b)
+
+    with pytest.raises(backlog.BacklogError, match=r"README\.md:9: .*replaced by"):
+        backlog.write_toc(b)
+
+    assert readme(b) == before
+
+
+def test_toc_accepts_a_line_that_is_exactly_the_derived_form(tmp_path):
+    toc = "### Open\n- [SC-001 — One](sc-001.md)\n\n### In Progress\n\n### Done\n\n"
+    b = make_backlog(tmp_path, [("SC-001", "One", "Open")], toc=toc)
+    before = readme(b)
 
     backlog.write_toc(b)
 
-    assert "- [SC-001 — Old plan](sc-001.md)\n" in readme(b)
-    assert "replaced by" not in readme(b)
+    assert readme(b) == before
+
+
+def test_toc_accepts_trailing_whitespace_after_the_link(tmp_path):
+    toc = "### Open\n- [SC-001 — One](sc-001.md)  \n\n"
+    b = make_backlog(tmp_path, [("SC-001", "One", "Open")], toc=toc)
+
+    backlog.write_toc(b)
+
+    assert "- [SC-001 — One](sc-001.md)\n" in readme(b)
+
+
+def test_toc_accepts_its_own_line_for_a_title_that_holds_a_link(tmp_path):
+    b = make_backlog(tmp_path, [("SC-002", "Follow up [SC-001](sc-001.md)", "Open"), ("SC-001", "One", "Open")])
+    backlog.write_toc(b)
+    first = readme(b)
+
+    backlog.write_toc(b)
+
+    assert readme(b) == first
+    assert "- [SC-002 — Follow up [SC-001](sc-001.md)](sc-002.md)\n" in first
 
 
 def test_toc_ends_at_a_level_two_heading_when_there_is_no_rule(tmp_path):
@@ -418,6 +451,17 @@ def test_set_status_refuses_before_writing_when_the_toc_cannot_be_derived(tmp_pa
     assert "**Status**: Open" in item(b, "SC-001")
 
 
+def test_set_status_refuses_a_line_with_text_after_its_link_and_writes_nothing(tmp_path):
+    b = make_backlog(tmp_path, ANNOTATED, toc=ANNOTATED_TOC)
+    before = readme(b)
+
+    with pytest.raises(backlog.BacklogError, match=r"README\.md:9: .*replaced by"):
+        backlog.set_status(b, "SC-040", "In Progress", TODAY)
+
+    assert "**Status**: Open" in item(b, "SC-040")
+    assert readme(b) == before
+
+
 # ---------- check ----------
 
 
@@ -482,6 +526,14 @@ def test_check_reports_a_done_marker_on_an_item_that_is_not_done(tmp_path):
     write_item(b, "SC-001", "# [SC-001] ✅ DONE - One\n\n**Status**: Open\n")
 
     assert "sc-001.md: heading marked DONE but status is 'Open'" in backlog.check(b)
+
+
+@pytest.mark.parametrize("marker", ["✅ DONE — ", "COMPLETED - "])
+def test_check_reports_a_heading_with_an_unknown_done_marker(tmp_path, marker):
+    b = clean_backlog(tmp_path, [("SC-001", "One", "Done (2026-01-01)")])
+    write_item(b, "SC-001", f"# [SC-001] {marker}One\n\n**Status**: Done (2026-01-01)\n")
+
+    assert f"sc-001.md: heading starts with {marker!r}, not the done marker '✅ DONE - '" in backlog.check(b)
 
 
 def test_check_tolerates_a_legacy_done_without_date_or_marker(tmp_path):

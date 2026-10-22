@@ -55,7 +55,7 @@ by the script's tests, not here.
 - A hand edit to the TOC does not survive the next run. A title is changed in
   the item's heading, a status in the item's `**Status**:` line.
 - A TOC line holds only what the item provides. Notes a README carried on a
-  line, such as "— replaced by …", are dropped; the item has to say it.
+  line, such as "— replaced by …", do not stay on it; the item has to say it.
 - The script refuses to rewrite a TOC block that holds anything no item
   produces, rather than drop it silently. A repository with such content moves
   it out of the block before the script can run there.

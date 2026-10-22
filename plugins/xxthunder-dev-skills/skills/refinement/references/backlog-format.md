@@ -210,7 +210,7 @@ File: `prefix-001.md`
 
 - **Sections in a fixed order**: `### Open`, `### In Progress`, `### Done`, then `### Superseded` only when an item has that status.
 - **Newest ID first** in every section. The sort key is prefix, then number, then letter, so an epic sits below its own substories and a legacy prefix forms a block of its own.
-- **One line per item**: `- [ID — title](file)`, the title taken from the item heading without the `✅ DONE -` marker. Nothing else goes on the line; what an item needs to say, it says in its own file.
+- **One line per item**: `- [ID — title](file)`, the title taken from the item heading without the `✅ DONE -` marker. Nothing else goes on the line: `toc` refuses a line that carries text after its link rather than drop the text, and `check` names a heading that starts with a done marker other than `✅ DONE -`. What an item needs to say, it says in its own file.
 
 ```markdown
 ### Open
