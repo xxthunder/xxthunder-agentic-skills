@@ -91,6 +91,12 @@ For every repo that the list or the in-progress source names:
    with **no** lines means the repo could not be read — no remote, no backlog
    on the default branch, a failed fetch: leave the repo out and report the
    script's message.
+3. **Read what is in progress as work** in that repo, for `show`:
+   ```bash
+   uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" --repo <checkout> show --in-progress
+   ```
+   The same lines, only for the items In Progress as work — the script leaves
+   out what is In Progress without being work that starts and ends.
 
 The one output serves every address in that repo: an ID that is not in it
 resolves to no item. An address without a backlog item (`<repo> #<issue>`) is
@@ -108,10 +114,8 @@ Resolve, read the contract, read the items. Then print two blocks:
 Then **contradictions — reported, never smoothed over**:
 
 - an item on the list whose status is Done or Superseded
-- an item *In Progress* in its backlog without an open start in the
-  in-progress source — **epics excluded**: an item with substories (`X` when
-  `Xa` exists) is In Progress because a substory is, so only the substory is
-  checked
+- an item that `show --in-progress` prints without an open start in the
+  in-progress source
 - an open start in the in-progress source whose item is not *In Progress* —
   *Open* (most often pulled on a feature branch, so the default branch does
   not show it yet), *Done* or *Superseded*
@@ -163,6 +167,7 @@ No contradictions → say so in one line. `show` never changes anything.
 
 - **`logbook`** shares the store and supplies *in progress*. Its `done` ends
   with one line suggesting a `drop` of the item it closed — never a call.
-- **`backlog.py`** reads the items: `show` prints status, priority and title;
-  `--repo` reads them at the remote's default branch, after a fetch.
+- **`backlog.py`** reads the items: `show` prints status, priority and title,
+  `show --in-progress` only the items In Progress as work; `--repo` reads
+  them at the remote's default branch, after a fetch.
 - **`backlog-ops`** changes an item's status; this skill only reads it.
