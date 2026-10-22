@@ -620,6 +620,56 @@ def test_show_without_ids_prints_every_readable_item_and_names_the_rest(tmp_path
     assert problems == ["sc-002.md: no '# [PREFIX-###] Title' heading"]
 
 
+def test_show_in_progress_prints_only_the_items_in_progress_as_work(tmp_path):
+    b = make_backlog(tmp_path, [
+        ("SC-001", "Backlog refinement", "In Progress"),
+        ("SC-002", "Epic", "In Progress"),
+        ("SC-002a", "Sub", "In Progress"),
+        ("SC-002b", "Later sub", "Open"),
+        ("SC-003", "Story", "In Progress"),
+        ("SC-004", "Waiting", "Open"),
+        ("SC-005", "Finished", "Done (2026-10-01)"),
+    ])
+
+    lines, problems = backlog.show(b, [], in_progress=True)
+
+    assert [line.split("\t")[0] for line in lines] == ["SC-002a", "SC-003"]
+    assert problems == []
+
+
+def test_show_in_progress_keeps_a_refinement_item_with_a_priority_out(tmp_path):
+    b = make_backlog(tmp_path, [("SC-001", "Backlog refinement", "In Progress")])
+    with_priority(b, "SC-001", "Medium")
+
+    lines, _ = backlog.show(b, [], in_progress=True)
+
+    assert lines == []
+
+
+def test_show_in_progress_with_ids_filters_those_ids(tmp_path):
+    b = make_backlog(tmp_path, [
+        ("SC-001", "Epic", "In Progress"),
+        ("SC-001a", "Sub", "Open"),
+        ("SC-002", "Story", "In Progress"),
+        ("SC-003", "Other", "In Progress"),
+    ])
+
+    lines, problems = backlog.show(b, ["SC-001", "SC-002", "SC-009"], in_progress=True)
+
+    assert lines == ["SC-002\tIn Progress\t—\tStory"]
+    assert problems == ["SC-009: no such item"]
+
+
+def test_cli_show_in_progress(tmp_path, capsys):
+    b = make_backlog(tmp_path, [
+        ("SC-001", "Backlog refinement", "In Progress"),
+        ("SC-002", "Story", "In Progress"),
+    ])
+
+    assert backlog.main(["--dir", str(b), "show", "--in-progress"]) == 0
+    assert capsys.readouterr().out == "SC-002\tIn Progress\t—\tStory\n"
+
+
 # ---------- another repository, read at its remote's default branch ----------
 
 
@@ -669,6 +719,17 @@ def test_repo_reads_the_items_the_remote_default_branch_has_now(tmp_path, remote
 
     assert capsys.readouterr().out == "SC-001\tDone (2026-10-21)\t—\tFirst\nSC-002\tOpen\t—\tSecond\n"
     assert state(checkout) == before
+
+
+def test_repo_show_in_progress_reads_the_remote_default_branch(tmp_path, remote, capsys):
+    bare, upstream = remote
+    write_item(upstream / "docs" / "backlog", "SC-002", item_text("SC-002", "Second", "In Progress"))
+    publish(upstream, "pull SC-002")
+    git(tmp_path, "clone", "-q", str(bare), "checkout")
+
+    assert backlog.main(["--repo", str(tmp_path / "checkout"), "show", "--in-progress"]) == 0
+
+    assert capsys.readouterr().out == "SC-002\tIn Progress\t—\tSecond\n"
 
 
 def test_repo_finds_the_default_branch_where_origin_head_was_never_set(tmp_path, remote, capsys):
