@@ -9,6 +9,11 @@
 ## Table of Contents
 
 ### Open
+- [XAS-044d — Read-only requirements scan for bootstrapping](xas-044d.md)
+- [XAS-044c — `design-record` keeps requirements true, and closing an item changes them](xas-044c.md)
+- [XAS-044b — Item and ADR headers as needs](xas-044b.md)
+- [XAS-044a — ADR: requirements become a binding design artifact where sphinx-needs is in use](xas-044a.md)
+- [XAS-044 — Requirements as a binding design artifact where sphinx-needs is in use](xas-044.md)
 - [XAS-038 — Make a feature branch ready to merge](xas-038.md)
 - [XAS-036 — Cross-repo stores: the working repository may be the store, and a failed pull says why](xas-036.md)
 - [XAS-029 — Semantic release via Release Please](xas-029.md)
