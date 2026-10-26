@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-045 — Store contracts may live in a file the store's `AGENTS.md` imports](xas-045.md)
 - [XAS-044d — Read-only requirements scan for bootstrapping](xas-044d.md)
 - [XAS-044c — `design-record` keeps requirements true, and closing an item changes them](xas-044c.md)
 - [XAS-044b — Item and ADR headers as needs](xas-044b.md)
