@@ -43,8 +43,9 @@ record — the backlog, the ADR log, the architecture document — naming only t
 artifacts that actually exist, with the paths it found them at.
 
 It also ships one plugin-level script, `scripts/store`, which resolves a
-cross-repo store from a variable pair (`<PREFIX>_PATH`, `<PREFIX>_REMOTE`) and
-commits-and-pushes into it. `learnings` uses it with the `LEARNINGS` prefix,
+cross-repo store from a variable pair (`<PREFIX>_PATH`, `<PREFIX>_REMOTE`),
+reads a contract section from the store's `AGENTS.md` or a file it imports with
+`@path`, and commits-and-pushes into it. `learnings` uses it with the `LEARNINGS` prefix,
 `logbook` and `next` with `LOGBOOK`; the stores themselves are configured in the user's
 settings, never in a repository, and may be one repo or two.
 

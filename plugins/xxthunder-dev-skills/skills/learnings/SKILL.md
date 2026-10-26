@@ -68,8 +68,15 @@ business — a failed clone or pull is reported, not worked around.
 ## Step 2: Read the contract — the store's `AGENTS.md`
 
 The rules for a learning are the **store's**, stated once, in its own
-`AGENTS.md`, in the section headed **`Learnings`**. Read that section and
-follow it. It names:
+`AGENTS.md`, in the section headed **`Learnings`**.
+That section may sit in a file the `AGENTS.md` pulls in with an `@path`
+import line. Get it with the script, which follows the imports:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/store" contract "<store>" Learnings
+```
+
+Follow what it prints. It names:
 
 - where learnings go (a directory) and how files are named
 - the note template, and which parts the author writes versus the agent drafts
@@ -81,7 +88,8 @@ follow it. It names:
 
 This skill ships **no template and no tests of its own**. A store that changes
 its format changes its `AGENTS.md`; this plugin does not ship a new version.
-If the section is missing, stop and say what the store has to provide — do not
+If the script exits non-zero — the section is missing or in more than one
+place — stop, show its message and say what the store has to provide — do not
 improvise a format. The one default is the commit subject, for a contract that
 names none; see Step 6.
 

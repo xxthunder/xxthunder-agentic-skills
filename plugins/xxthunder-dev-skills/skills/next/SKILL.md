@@ -54,7 +54,15 @@ never fall back to the current repository, never create one.
 ## Step 2: Read the contract — the store's `AGENTS.md`
 
 The rules for the list are the **store's**, stated once, in its `AGENTS.md`,
-in the section headed **`Next`**. Read that section and follow it. It names:
+in the section headed **`Next`**.
+That section may sit in a file the `AGENTS.md` pulls in with an `@path`
+import line. Get it with the script, which follows the imports:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/store" contract "<store>" Next
+```
+
+Follow what it prints. It names:
 
 - where the list is, and its order
 - the line format
@@ -63,7 +71,8 @@ in the section headed **`Next`**. Read that section and follow it. It names:
 - the language, and the commit subject of a change
 
 This skill ships **no list format, no path and no language of its own**. If
-the section is missing or names none of the items above, stop and say what
+the script exits non-zero — the section is missing or in more than one place —
+or the section names none of the items above, stop and say what
 the store has to provide — do not improvise.
 
 ## Step 3: Read the items — fetched, never pulled

@@ -100,7 +100,9 @@ one skill**; a helper used by a single skill stays in that skill's own
 directory, as the paperless plugin does. `store` is a POSIX sh script
 reached as `${CLAUDE_PLUGIN_ROOT}/scripts/store`: it
 resolves a cross-repo store from a variable pair (`<PREFIX>_PATH`,
-`<PREFIX>_REMOTE`) and commits-and-pushes into it, with one rebase retry.
+`<PREFIX>_REMOTE`), prints a contract section from the store's `AGENTS.md`
+or any file it pulls in with an `@path` import line (one section in one place,
+XAS-045), and commits-and-pushes into it, with one rebase retry.
 `learnings` calls it with the `LEARNINGS` prefix, `logbook` and `next` with
 `LOGBOOK`; the two stores may be one repo or two. `backlog.py` is a PEP 723 Python script
 run with `uv run`; `refinement` and `backlog-ops` call it for every mechanical
@@ -225,7 +227,8 @@ sequenceDiagram
     L->>S: resolve LEARNINGS
     S->>K: pull --ff-only / clone
     S-->>L: store path
-    L->>K: read AGENTS.md → Learnings
+    L->>S: contract → Learnings
+    S->>K: read AGENTS.md and its imports
     L->>U: run the store's tests, out loud
     U->>L: the claim, in the author's words
     L->>K: write note, add hub line
@@ -254,7 +257,9 @@ sequenceDiagram
     U->>G: start
     G->>S: resolve LOGBOOK
     S-->>G: logbook path
-    G->>K: read AGENTS.md → Logbook, look up address
+    G->>S: contract → Logbook
+    S->>K: read AGENTS.md and its imports
+    G->>K: look up address
     alt no open started for this address
         G->>K: started line
         G->>S: commit-push
@@ -293,7 +298,9 @@ sequenceDiagram
     U->>N: /next
     N->>S: resolve LOGBOOK
     S-->>N: store path (pulled)
-    N->>K: read AGENTS.md → Next, the list, the open starts in the log
+    N->>S: contract → Next
+    S->>K: read AGENTS.md and its imports
+    N->>K: read the list, the open starts in the log
     loop each repo named
         alt not cloned
             N-->>U: clone it? — no leaves it out
