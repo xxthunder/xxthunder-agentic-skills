@@ -61,8 +61,15 @@ business.
 ## Step 2: Read the contract — the logbook's `AGENTS.md`
 
 The rules for a log line are the **logbook's**, stated once, in its own
-`AGENTS.md`, in the section headed **`Logbook`**. Read that section and follow
-it. It names:
+`AGENTS.md`, in the section headed **`Logbook`**.
+That section may sit in a file the `AGENTS.md` pulls in with an `@path`
+import line. Get it with the script, which follows the imports:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/store" contract "<logbook>" Logbook
+```
+
+Follow what it prints. It names:
 
 - where the log is
 - the order — how days are headed, and **where a new line goes**
@@ -74,8 +81,8 @@ it. It names:
 
 This skill ships **no format, no placement rule and no language of its own**.
 A logbook that changes any of these changes its `AGENTS.md`; this plugin does
-not ship a new version. If the section is missing, or names none of the items
-above, stop and say what the logbook has to provide — do not improvise. The
+not ship a new version. If the script exits non-zero — the section is missing
+or in more than one place — or the section names none of the items above, stop and say what the logbook has to provide — do not improvise. The
 one default is the commit subject, for a contract that names none; see
 [Writing a line](#writing-a-line).
 

@@ -391,3 +391,122 @@ def test_commit_push_gives_up_when_the_second_push_is_rejected_too(tmp_path, env
     assert "push" in result.stderr.lower()
     assert git("log", "-1", "--format=%s", "main", cwd=remote) == "seed"
     assert git("log", "-1", "--format=%s", cwd=store) == "mine"
+
+
+# --- contract ----------------------------------------------------------------
+#
+# `store contract <STORE_DIR> <SECTION>` prints the section headed <SECTION>
+# from the store's AGENTS.md or from any file it pulls in with an `@path`
+# import line. The contract is one section in one place: missing or found
+# twice, the command fails loudly instead of guessing.
+
+
+def write(path: Path, text: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(text.encode())
+    return path
+
+
+def run_contract(store: Path, section: str, env: dict[str, str]) -> subprocess.CompletedProcess:
+    return run_store(["contract", str(store), section], cwd=store, env=env)
+
+
+def test_contract_prints_the_section_from_agents_md(tmp_path, env):
+    store = tmp_path / "store"
+    write(store / "AGENTS.md",
+          "# Store\n\n## Logbook\n\nOne line per event.\n\n### Order\n\nNewest first.\n\n"
+          "## Next\n\nRanked list.\n")
+    result = run_contract(store, "Logbook", env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "## Logbook\n\nOne line per event.\n\n### Order\n\nNewest first.\n\n"
+
+
+def test_contract_follows_an_import_relative_to_the_importing_file(tmp_path, env):
+    store = tmp_path / "store"
+    write(store / "AGENTS.md", "# Store\n\n@asf/AGENTS.md\n\n## Areas\n\nRecipes.\n")
+    write(store / "asf" / "AGENTS.md", "# Shared\n\n@contracts.md\n")
+    write(store / "asf" / "contracts.md", "## Learnings\n\nOne file per learning.\n")
+    result = run_contract(store, "Learnings", env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "## Learnings\n\nOne file per learning.\n"
+
+
+def test_contract_section_ends_at_the_end_of_its_file(tmp_path, env):
+    store = tmp_path / "store"
+    write(store / "AGENTS.md", "@asf/AGENTS.md\n\n## Areas\n\nRecipes.\n")
+    write(store / "asf" / "AGENTS.md", "## Next\n\nRanked list.\n")
+    result = run_contract(store, "Next", env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "## Next\n\nRanked list.\n"
+
+
+def test_contract_fails_and_names_both_files_when_the_section_is_found_twice(tmp_path, env):
+    store = tmp_path / "store"
+    write(store / "AGENTS.md", "@asf/AGENTS.md\n\n## Logbook\n\nLocal copy.\n")
+    write(store / "asf" / "AGENTS.md", "## Logbook\n\nShared copy.\n")
+    result = run_contract(store, "Logbook", env)
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "AGENTS.md" in result.stderr
+    assert "asf/AGENTS.md" in result.stderr
+
+
+def test_contract_fails_when_the_section_is_missing(tmp_path, env):
+    store = tmp_path / "store"
+    write(store / "AGENTS.md", "# Store\n\n## Next\n\nRanked list.\n")
+    result = run_contract(store, "Logbook", env)
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "Logbook" in result.stderr
+
+
+def test_contract_fails_when_the_store_has_no_agents_md(tmp_path, env):
+    store = tmp_path / "store"
+    store.mkdir()
+    result = run_contract(store, "Logbook", env)
+    assert result.returncode != 0
+    assert "AGENTS.md" in result.stderr
+
+
+def test_contract_fails_and_names_a_missing_import(tmp_path, env):
+    store = tmp_path / "store"
+    write(store / "AGENTS.md", "@asf/AGENTS.md\n\n## Logbook\n\nHere.\n")
+    result = run_contract(store, "Logbook", env)
+    assert result.returncode != 0
+    assert "asf/AGENTS.md" in result.stderr
+
+
+def test_contract_ignores_headings_and_imports_inside_code_fences(tmp_path, env):
+    store = tmp_path / "store"
+    write(store / "AGENTS.md",
+          "## Recipes\n\n```\n# Title\n## Logbook\n@nowhere.md\n```\n\nDone.\n\n"
+          "## Logbook\n\n```\n## Not a heading\n```\n\nNewest first.\n\n## Next\n")
+    result = run_contract(store, "Logbook", env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "## Logbook\n\n```\n## Not a heading\n```\n\nNewest first.\n\n"
+
+
+def test_contract_survives_an_import_cycle(tmp_path, env):
+    store = tmp_path / "store"
+    write(store / "AGENTS.md", "@a.md\n")
+    write(store / "a.md", "@AGENTS.md\n\n## Next\n\nRanked list.\n")
+    result = run_contract(store, "Next", env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "## Next\n\nRanked list.\n"
+
+
+def test_contract_reads_crlf_files(tmp_path, env):
+    store = tmp_path / "store"
+    write(store / "AGENTS.md", "@asf/AGENTS.md\r\n")
+    write(store / "asf" / "AGENTS.md", "## Logbook\r\n\r\nNewest first.\r\n\r\n## Next\r\n")
+    result = run_contract(store, "Logbook", env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "## Logbook\n\nNewest first.\n\n"
+
+
+def test_contract_matches_the_whole_heading_only(tmp_path, env):
+    store = tmp_path / "store"
+    write(store / "AGENTS.md", "## Logbook archive\n\nOld.\n\n## Logbook\n\nNew.\n")
+    result = run_contract(store, "Logbook", env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "## Logbook\n\nNew.\n"

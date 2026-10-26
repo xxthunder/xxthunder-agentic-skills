@@ -1,6 +1,7 @@
 #!/usr/bin/env sh
-# store — resolve a cross-repo store from a variable pair, and commit-and-push
-# a result into it. Shared by the `learnings` and `logbook` skills.
+# store — resolve a cross-repo store from a variable pair, read a contract from
+# it, and commit-and-push a result into it. Shared by the `learnings`, `logbook`
+# and `next` skills.
 #
 #   store resolve <PREFIX>
 #       Prints the store's absolute path on stdout. Resolution order, in which
@@ -11,6 +12,15 @@
 #         3. <PREFIX>_REMOTE is set — cloned once into
 #            $XDG_CACHE_HOME/xxthunder-dev-skills/stores/<prefix>, pulled after;
 #         4. nothing configured — says so on stderr, exits 2.
+#
+#   store contract <STORE_DIR> <SECTION>
+#       Prints the section headed <SECTION> — at any heading level, through the
+#       line before the next heading of the same or a higher level — from the
+#       store's AGENTS.md or from any file it pulls in with an import line
+#       (`@path` alone on a line, relative to the importing file, followed
+#       recursively). Headings and import lines inside code fences do not count.
+#       The contract is one section in one place: missing, found twice, or an
+#       import that names no file — says so on stderr, exits 1.
 #
 #   store commit-push <STORE_DIR> <MESSAGE> <PATH>...
 #       Stages the paths, commits, pushes. A rejected push gets one
@@ -26,7 +36,7 @@
 set -u
 
 usage() {
-    printf 'usage: store resolve <PREFIX>\n       store commit-push <STORE_DIR> <MESSAGE> <PATH>...\n' >&2
+    printf 'usage: store resolve <PREFIX>\n       store contract <STORE_DIR> <SECTION>\n       store commit-push <STORE_DIR> <MESSAGE> <PATH>...\n' >&2
     exit 64
 }
 
@@ -99,6 +109,106 @@ resolve() {
     die 2 "no store configured — set ${prefix}_PATH (a local checkout) or ${prefix}_REMOTE (a clone URL) in your user settings (~/.claude/settings.json → env)"
 }
 
+# --- contract -----------------------------------------------------------------
+
+# The lines of file $1 that are import lines, outside code fences, as the
+# path each one names. CRLF files read the same as LF files.
+imports_of() {
+    awk '
+        { sub(/\r$/, "") }
+        /^[ \t]*(```|~~~)/ { fence = !fence; next }
+        !fence && /^[ \t]*@[^ \t]+[ \t]*$/ { sub(/^[ \t]*@/, ""); sub(/[ \t]*$/, ""); print }
+    ' "$1"
+}
+
+# With mode=count: how often file $3 has a section headed $2.
+# With mode=print: the lines of every such section, CR stripped.
+section_of() {
+    awk -v mode="$1" -v want="$2" '
+        { sub(/\r$/, "") }
+        {
+            fenceline = ($0 ~ /^[ \t]*(```|~~~)/)
+            if (!fence && !fenceline && match($0, /^#+[ \t]/)) {
+                match($0, /^#+/)
+                level = RLENGTH
+                title = substr($0, level + 1)
+                sub(/^[ \t]+/, "", title)
+                sub(/[ \t]+$/, "", title)
+                if (inside && level <= wantlevel) inside = 0
+                if (!inside && title == want) { inside = 1; wantlevel = level; count++ }
+            }
+            if (fenceline) fence = !fence
+            if (inside && mode == "print") print
+        }
+        END { if (mode == "count") print count + 0 }
+    ' "$3"
+}
+
+# The absolute form of path $1, for telling files apart. Plain `pwd`, never
+# `pwd -P`; only ever compared with itself, so the MSYS form is fine here.
+absolute() {
+    printf '%s/%s\n' "$(cd "$(dirname "$1")" && pwd)" "$(basename "$1")"
+}
+
+contract() {
+    dir=$1
+    section=$2
+    [ -f "$dir/AGENTS.md" ] ||
+        die 1 "no AGENTS.md in $dir — the store has to provide its contract there, in a section headed '$section'"
+    root=$(cd "$dir" && pwd)
+    newline='
+'
+    # Breadth-first over the import graph; `seen` stops a cycle.
+    pending="$root/AGENTS.md"
+    seen=""
+    found=""
+    while [ -n "$pending" ]; do
+        file=${pending%%"$newline"*}
+        case "$pending" in
+            *"$newline"*) pending=${pending#*"$newline"} ;;
+            *) pending="" ;;
+        esac
+        case "$newline$seen$newline" in
+            *"$newline$file$newline"*) continue ;;
+        esac
+        seen="$seen$newline$file"
+        name=${file#"$root"/}
+
+        count=$(section_of count "$section" "$file")
+        i=0
+        while [ "$i" -lt "$count" ]; do
+            found="$found$newline$name"
+            i=$((i + 1))
+        done
+        [ "$count" -gt 0 ] && hit=$file
+
+        imports=$(imports_of "$file")
+        [ -n "$imports" ] || continue
+        here=$(dirname "$file")
+        while IFS= read -r target; do
+            case "$target" in
+                /*) path=$target ;;
+                *) path="$here/$target" ;;
+            esac
+            [ -f "$path" ] || die 1 "$name imports @$target, which does not exist"
+            path=$(absolute "$path")
+            pending="${pending:+$pending$newline}$path"
+        done <<EOF
+$imports
+EOF
+    done
+
+    found=${found#"$newline"}
+    [ -n "$found" ] ||
+        die 1 "no section headed '$section' in $root/AGENTS.md or any file it imports — the store has to provide its contract there"
+    case "$found" in
+        *"$newline"*)
+            die 1 "the section headed '$section' is in more than one place — keep exactly one: $(printf '%s' "$found" | tr '\n' ' ')"
+            ;;
+    esac
+    section_of print "$section" "$hit"
+}
+
 # --- commit-push --------------------------------------------------------------
 
 commit_push() {
@@ -143,6 +253,10 @@ case "$command" in
     resolve)
         [ $# -eq 1 ] || usage
         resolve "$1"
+        ;;
+    contract)
+        [ $# -eq 2 ] || usage
+        contract "$1" "$2"
         ;;
     commit-push)
         [ $# -ge 3 ] || usage
