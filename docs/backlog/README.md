@@ -33,7 +33,6 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
-- [XAS-045 — Store contracts may live in a file the store's `AGENTS.md` imports](xas-045.md)
 - [XAS-032 — Establish whether `retrospective` triggers in practice](xas-032.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
 - [XAS-027 — Agentic Engineering-as-Code — durable design record](xas-027.md)
@@ -42,6 +41,7 @@
 - [XAS-001 — Backlog refinement](xas-001.md)
 
 ### Done
+- [XAS-045 — Store contracts may live in a file the store's `AGENTS.md` imports](xas-045.md)
 - [XAS-043 — `backlog.py` drops text after the link in a table-of-contents line](xas-043.md)
 - [XAS-042 — `next` does not report the standing refinement item](xas-042.md)
 - [XAS-041 — `backlog-ops` pull: In Progress lands on the default branch at once](xas-041.md)
