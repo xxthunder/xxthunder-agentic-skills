@@ -151,12 +151,9 @@ in what they check first and what they say after.
    learning: none exists yet at this point, and a line is never edited later.
    A learning carries its own origin; it does not need the log to point at it.
 3. Then ask **once**: *"Does anything here outlive this repo?"* A yes hands off
-   to `learnings capture`; a no goes straight on to step 4. This is how the
-   capture question reaches the end of an item without `backlog-ops` knowing
-   that learnings exist.
-4. Either way, then suggest, in one line, `next drop <ITEM-ID>` — the closed item may
-   still be ranked on the next list. Do not run it unasked; whether a list
-   exists is that skill's business.
+   to `learnings capture`; a no ends the operation. This is how the capture
+   question reaches the end of an item without `backlog-ops` knowing that
+   learnings exist.
 
 ## What This Skill Never Does
 
@@ -178,8 +175,6 @@ in what they check first and what they say after.
   logbook is configured; this skill finds out and says so.
 - **`learnings`**: `start` suggests its `recall`; `done` asks the one question
   whose yes is its `capture`. Two skills, two contracts, possibly one repo.
-- **`next`**: shares this store and reads its open starts as *in progress*;
-  `done` suggests its `drop` in one line, never a call.
 - **`commit-helper`** owns the default commit subject: its conventional format,
   with the item ID at the end. It makes no commit here. The script commits, in
   the logbook; the consuming repo has nothing to commit.
