@@ -37,6 +37,7 @@ this repository; keep it complete.
   cloned there, after the author agrees.
 - **Commit**: one commit per change, pushed immediately, with the subject
   `docs(board): <put|drop|pull|close> · <repo> · <text> (<ITEM-ID>)` — `<text>` is the new
-  position, the reason for a drop, or the item's title on a pull or close.
+  position, the reason for a drop — or the item's title when the author gave none — or the
+  item's title on a pull or close.
 - **Language**: English (`asf/CONVENTIONS.md` → Language).
 
