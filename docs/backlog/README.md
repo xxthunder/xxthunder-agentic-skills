@@ -9,7 +9,6 @@
 ## Table of Contents
 
 ### Open
-- [XAS-047 — Behavioural evals for the dev skills](xas-047.md)
 - [XAS-044d — Read-only requirements scan for bootstrapping](xas-044d.md)
 - [XAS-044c — `design-record` keeps requirements true, and closing an item changes them](xas-044c.md)
 - [XAS-044b — Item and ADR headers as needs](xas-044b.md)
@@ -34,6 +33,7 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
+- [XAS-047 — Behavioural evals for the dev skills](xas-047.md)
 - [XAS-046 — Kanban as code: `next` shows a board, `backlog-ops` moves its cards](xas-046.md)
 - [XAS-032 — Establish whether `retrospective` triggers in practice](xas-032.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
