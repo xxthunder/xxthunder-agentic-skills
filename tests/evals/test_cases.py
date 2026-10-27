@@ -3,6 +3,7 @@ on the end state its scenario asks for — built here by hand, without an agent.
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import date
 
 import pytest
 
@@ -11,6 +12,11 @@ from evals.cases import CASES
 from evals.fixture import INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, State, display_id
 
 LOG_FILE = "engineering/log.md"
+TODAY = date.today().isoformat()
+SEED_LOG = "# Log\n\n## 2026-10-20\n- **started** · demo DEMO-003 · Export to CSV\n"
+CLAIM = "A health check that calls its dependencies turns one outage into many."
+NOTE = f"learnings/{TODAY}_health_checks_spread_outages.md"
+ADR = "docs/adr/0002-the-sync-job-keeps-its-retry-state-in-sqlite.md"
 BY_NAME = {c.name: c for c in CASES}
 
 
@@ -90,6 +96,54 @@ def expected(name: str) -> State:
                        output="Logged. Does anything here outlive this repo?")
     if name == "trigger-was-steht-an":
         return replace(s, skills=["xxthunder-dev-skills:next"])
+    if name == "tick-ac":
+        return replace(s, demo_porcelain="M  docs/backlog/demo-007.md\n",
+                       demo_files={"docs/backlog/demo-007.md": "**Status**: Open\n- [x] Health endpoint works\n"})
+    if name in ("logbook-started", "logbook-note"):
+        event, item = ("started", "DEMO-007") if name == "logbook-started" else ("note", "DEMO-006")
+        log = SEED_LOG.replace("## 2026-10-20", f"## {TODAY}\n- **{event}** · demo {item} · x\n\n## 2026-10-20")
+        return replace(s, store_commits=[(f"docs(log): {event} · demo · x ({item})", [LOG_FILE])],
+                       store_files={LOG_FILE: log})
+    if name == "logbook-note-unconfirmed":
+        return replace(s, output="I'd add `- **note** · demo DEMO-006 · Waits for the token rotation`. Write it?")
+    if name == "logbook-started-again":
+        return replace(s, output="DEMO-003 was started on 2026-10-20 and has no done yet; nothing written.")
+    if name == "learnings-capture":
+        note = f"# Health checks spread outages\n\n## Claim\n\n{CLAIM}\n\n## Why it holds\n*(drafted by the agent)*\n"
+        hub = f"# Learnings\n\n- [old](old.md) — demo `DEMO-003`, 2026-10-01\n- [{CLAIM}]({NOTE.split('/')[-1]}) — demo DEMO-007, {TODAY}\n"
+        return replace(s, store_commits=[("docs(learnings): health checks spread outages (DEMO-007)",
+                                          [NOTE, "learnings/README.md"])],
+                       store_files={NOTE: note, "learnings/README.md": hub})
+    if name == "learnings-recall":
+        return replace(s, output="- git archive exports commits only — learnings/2026-10-01_git_archive_exports_commits_only.md")
+    if name == "design-record-adr":
+        adr = (f"# ADR-0002 — The sync job keeps its retry state in SQLite\n\n**Status**: Accepted\n"
+               f"**Date**: {TODAY}\n**Related**: [DEMO-001](../backlog/demo-001.md)\n\n## Context\n\n"
+               "## Decision\n\n## Alternatives considered\n\nRedis.\n\n## Consequences\n")
+        return replace(s, demo_porcelain=" M docs/adr/README.md\n?? docs/adr/0002\n",
+                       demo_files={ADR: adr, "docs/adr/README.md": "| [0002](0002-the-sync-job-keeps-its-retry-state-in-sqlite.md) |"})
+    if name == "design-record-declines":
+        return replace(s, skills=["xxthunder-dev-skills:design-record"],
+                       output="This fails part 2 of the three-part test: nothing to record.")
+    if name == "design-record-asks":
+        return replace(s, skills=["xxthunder-dev-skills:design-record"], output="Why did Redis lose?")
+    if name == "architecture-drift":
+        return replace(s, skills=["xxthunder-dev-skills:architecture-scan"],
+                       output="- `src/export/` is undocumented.\n- `src/importer/` no longer exists.")
+    if name == "commit":
+        return replace(s, demo_local_subjects=["docs: describe the health endpoint (DEMO-007)"],
+                       demo_head_message="docs: describe the health endpoint (DEMO-007)\n\n"
+                                         "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n")
+    if name == "refinement-bootstrap":
+        return replace(s, demo_status={}, demo_porcelain="?? docs/backlog/\n",
+                       demo_files={"docs/backlog/README.md": "## Table of Contents\n\n- [SYNC-001 — Refinement](sync-001.md)\n"
+                                                             "\n## Notes\n\n**ID prefix**: `SYNC`\n",
+                                   "docs/backlog/sync-001.md": "# [SYNC-001] Refinement\n\n**Status**: In Progress\n"})
+    if name == "refinement-summary":
+        return replace(s, skills=["xxthunder-dev-skills:refinement"],
+                       output="In Progress: DEMO-003, DEMO-006. Open: DEMO-001, DEMO-002, DEMO-004, DEMO-007.")
+    if name == "trigger-retrospective":
+        return replace(s, skills=["xxthunder-dev-skills:retrospective"])
     raise KeyError(name)
 
 
@@ -142,3 +196,85 @@ def test_show_that_writes_into_the_consumer_fails():
 def test_logbook_done_that_still_suggests_next_drop_fails():
     s = replace(expected("logbook-done"), output="Logged. Suggest: `next drop DEMO-003`.")
     assert any("next drop" in f for f in BY_NAME["logbook-done"].check(s))
+
+
+def test_tick_that_moves_the_status_fails():
+    s = expected("tick-ac")
+    s = replace(s, demo_status=status(s, DEMO_007="In Progress"))
+    assert any("status moved" in f for f in BY_NAME["tick-ac"].check(s))
+
+
+def test_tick_that_commits_fails():
+    s = replace(expected("tick-ac"), demo_local_subjects=["docs(backlog): tick AC 1 (DEMO-007)"])
+    assert any("committed" in f for f in BY_NAME["tick-ac"].check(s))
+
+
+def test_log_line_appended_at_the_bottom_fails():
+    s = expected("logbook-started")
+    s = replace(s, store_files={LOG_FILE: SEED_LOG + f"\n## {TODAY}\n- **started** · demo DEMO-007 · x\n"})
+    assert BY_NAME["logbook-started"].check(s)
+
+
+def test_capture_that_rewords_the_claim_fails():
+    s = expected("learnings-capture")
+    s = replace(s, store_files={k: v.replace(CLAIM, "Health checks should not call dependencies.")
+                                for k, v in s.store_files.items()})
+    assert any("verbatim" in f for f in BY_NAME["learnings-capture"].check(s))
+
+
+def test_capture_that_writes_into_the_consumer_fails():
+    s = replace(expected("learnings-capture"), demo_porcelain="?? learnings/\n")
+    assert any("demo working tree" in f for f in BY_NAME["learnings-capture"].check(s))
+
+
+def test_recall_that_lists_every_note_fails():
+    s = replace(expected("learnings-recall"), output=expected("learnings-recall").output + "\n- Flaky tests hide in retries")
+    assert any("unrelated" in f for f in BY_NAME["learnings-recall"].check(s))
+
+
+def test_adr_that_commits_fails():
+    s = replace(expected("design-record-adr"), demo_local_subjects=["docs(adr): record ADR-0002"])
+    assert any("committed" in f for f in BY_NAME["design-record-adr"].check(s))
+
+
+def test_adr_that_reuses_number_one_fails():
+    s = expected("design-record-adr")
+    s = replace(s, demo_files={k.replace("0002", "0001"): v for k, v in s.demo_files.items()})
+    assert any("ADR files 0002" in f for f in BY_NAME["design-record-adr"].check(s))
+
+
+def test_adr_written_without_rationale_fails():
+    s = replace(expected("design-record-asks"), demo_files={ADR: "# ADR-0002"}, demo_porcelain="?? docs/adr/\n")
+    assert BY_NAME["design-record-asks"].check(s)
+
+
+def test_scan_that_edits_the_document_fails():
+    s = replace(expected("architecture-drift"), demo_porcelain=" M docs/architecture.md\n")
+    assert any("demo working tree" in f for f in BY_NAME["architecture-drift"].check(s))
+
+
+def test_commit_without_the_item_id_fails():
+    s = replace(expected("commit"), demo_local_subjects=["docs: describe the health endpoint"])
+    assert any("item ID" in f for f in BY_NAME["commit"].check(s))
+
+
+def test_commit_that_pushes_to_develop_fails():
+    s = replace(expected("commit"), demo_remote_subjects=["docs: describe the health endpoint (DEMO-007)"])
+    assert any("pushed" in f for f in BY_NAME["commit"].check(s))
+
+
+def test_bootstrap_that_commits_fails():
+    s = replace(expected("refinement-bootstrap"), demo_local_subjects=["docs(backlog): bootstrap"])
+    assert any("committed" in f for f in BY_NAME["refinement-bootstrap"].check(s))
+
+
+def test_note_written_without_confirmation_fails():
+    s = replace(expected("logbook-note"), output="Logged.")
+    assert any("store changed" in f for f in BY_NAME["logbook-note-unconfirmed"].check(s))
+
+
+def test_bootstrap_that_continues_the_old_numbering_fails():
+    s = expected("refinement-bootstrap")
+    s = replace(s, demo_files={k.replace("sync-001", "sync-008"): v.replace("sync-001", "sync-008")
+                               for k, v in s.demo_files.items()})
+    assert BY_NAME["refinement-bootstrap"].check(s)
