@@ -19,4 +19,4 @@ package = false
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["plugins"]
+source = ["plugins", "evals"]
