@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from evals.cases import CASES
-from evals.runner import config_dir, dependency_dirs, export_plugin, report, run_one
+from evals.runner import config_dir, dependency_dirs, export_plugin, remove_tree, report, run_one
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -50,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
         cases = [c for c in CASES if not a.case or c.name in a.case]
         for c in cases:
             for old in out.glob(f"{c.name}-*"):
-                shutil.rmtree(old)
+                remove_tree(old)
         plugin = export_plugin(REPO_ROOT, a.ref, out / "plugin")
         dirs = dependency_dirs(plugin, config_dir(dict(os.environ))) + [plugin]
         jobs = [(c, n) for c in cases for n in range(1, a.runs + 1)]
