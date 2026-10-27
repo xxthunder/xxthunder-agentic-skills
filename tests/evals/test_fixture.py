@@ -123,3 +123,21 @@ def test_setup_leaves_a_seed_with_no_local_commits(tmp_path, name):
     s = snapshot(tmp_path, "", [])
     assert s.demo_local_subjects == []
     assert case.check(s), f"{name} passes on its own setup"
+
+
+def test_a_failing_git_command_names_itself_and_its_directory(tmp_path):
+    from evals.fixture import git
+
+    with pytest.raises(RuntimeError, match=r"git log in .*: fatal"):
+        git(tmp_path, "log")
+
+
+def test_text_files_skips_binaries_git_and_caches(tmp_path):
+    from evals.fixture import text_files
+
+    (tmp_path / "notes.md").write_text("ü\n", encoding="utf-8")
+    (tmp_path / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe")
+    for d in (".git", "__pycache__"):
+        (tmp_path / d).mkdir()
+        (tmp_path / d / "x.txt").write_text("x", encoding="utf-8")
+    assert text_files(tmp_path) == {"notes.md": "ü\n"}
