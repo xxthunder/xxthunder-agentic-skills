@@ -61,7 +61,12 @@ is at a git ref, and checks the files, commits and statuses the run leaves behin
 
 A change to a skill's behaviour needs a case. Write the case first, and check
 that it fails against `develop` before it passes on your branch: a case that
-passes on both tests nothing.
+passes on both tests nothing. Every skill already has cases for what it does
+today. Those pass on `develop` by design, and they catch a regression.
+
+The plugin is exported from the ref with `git archive`, which sees commits
+only. To evaluate uncommitted work, pass `--ref "$(git stash create)"`: it makes
+a commit of the working tree without moving a branch.
 
 ```bash
 uv run --group dev python -m evals list
