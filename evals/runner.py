@@ -9,7 +9,9 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import stat
 import subprocess
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
@@ -24,6 +26,21 @@ TOOLS = ("Bash", "Read", "Edit", "Write", "Glob", "Grep", "Skill")
 TIMEOUT = 900
 
 
+def remove_tree(path: Path) -> None:
+    """Delete *path* if it exists, read-only files included — git writes its objects
+    read-only, and on Windows `rmtree` refuses to delete those."""
+    def clear_and_retry(func, target, _exc):
+        os.chmod(target, stat.S_IWRITE)
+        func(target)
+
+    if not path.exists():
+        return
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=clear_and_retry)
+    else:
+        shutil.rmtree(path, onerror=clear_and_retry)
+
+
 def export_plugin(repo: Path, ref: str, dest: Path) -> Path:
     """The plugin as it is at *ref*, extracted under *dest*; returns its directory."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -32,7 +49,7 @@ def export_plugin(repo: Path, ref: str, dest: Path) -> Path:
                            cwd=repo, capture_output=True, text=True)
         if r.returncode:
             raise RuntimeError(f"cannot export {PLUGIN} at {ref}: {r.stderr.strip()}")
-        shutil.rmtree(dest / "plugins", ignore_errors=True)
+        remove_tree(dest / "plugins")
         with tarfile.open(archive) as tar:
             tar.extractall(dest, **({"filter": "data"} if hasattr(tarfile, "data_filter") else {}))
     return dest / PLUGIN
@@ -107,7 +124,7 @@ def parse_stream(stream: str) -> tuple[str, list[str]]:
 
 def run_one(case: Case, plugin_dirs: list[Path], n: int, out: Path) -> dict:
     sandbox = out / f"{case.name}-{n}"
-    shutil.rmtree(sandbox, ignore_errors=True)
+    remove_tree(sandbox)
     build(sandbox, case.board_contract)
     if case.setup:
         case.setup(sandbox / "checkouts" / "demo")

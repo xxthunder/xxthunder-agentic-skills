@@ -126,3 +126,23 @@ def test_report_prints_pass_rate_and_failures(tmp_path):
     lines = report(tmp_path)
     assert any(l.startswith("close") and "1/2" in l for l in lines)
     assert any("close#2" in l and "card still on board" in l for l in lines)
+
+
+def test_remove_tree_removes_read_only_files_as_git_leaves_them(tmp_path):
+    import stat
+
+    from evals.runner import remove_tree
+
+    objects = tmp_path / "sandbox" / "remotes" / "store.git" / "objects" / "ab"
+    objects.mkdir(parents=True)
+    blob = objects / "cdef"
+    blob.write_bytes(b"x")
+    blob.chmod(stat.S_IREAD)  # git writes its objects read-only; Windows then refuses to delete them
+    remove_tree(tmp_path / "sandbox")
+    assert not (tmp_path / "sandbox").exists()
+
+
+def test_remove_tree_of_a_missing_path_does_nothing(tmp_path):
+    from evals.runner import remove_tree
+
+    remove_tree(tmp_path / "never-built")
