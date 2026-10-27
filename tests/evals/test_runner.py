@@ -74,10 +74,15 @@ def test_clean_env_drops_every_store_pair_and_the_parent_session(tmp_path):
 
 
 def test_clean_env_points_the_requested_stores_into_the_sandbox(tmp_path):
-    env = clean_env({}, tmp_path, board=True, logbook=True)
-    for prefix in ("BOARD", "LOGBOOK"):
+    env = clean_env({}, tmp_path, board=True, logbook=True, learnings=True)
+    for prefix in ("BOARD", "LOGBOOK", "LEARNINGS"):
         assert env[f"{prefix}_PATH"] == str(tmp_path / "store")
         assert env[f"{prefix}_REMOTE"] == str(tmp_path / "remotes" / "store.git")
+
+
+def test_clean_env_leaves_learnings_unset_unless_asked(tmp_path):
+    env = clean_env({"LEARNINGS_PATH": "/k"}, tmp_path, board=True, logbook=True)
+    assert "LEARNINGS_PATH" not in env and "LEARNINGS_REMOTE" not in env
 
 
 def test_claude_command_isolates_settings_and_loads_the_plugins(tmp_path):
@@ -100,6 +105,16 @@ def test_parse_stream_collects_text_and_skill_calls():
     ]
     stream = "\n".join(json.dumps(e) for e in events) + "\nnot json\n"
     assert parse_stream(stream) == ("The board:\ndone\n", ["xxthunder-dev-skills:next"])
+
+
+def test_parse_stream_output_is_the_final_answer_when_the_run_finished():
+    events = [
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "Now the board check."}]}},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "Pulled DEMO-007."}]}},
+        {"type": "result", "subtype": "success", "result": "Pulled DEMO-007."},
+    ]
+    stream = "\n".join(json.dumps(e) for e in events)
+    assert parse_stream(stream) == ("Pulled DEMO-007.", [])
 
 
 def test_report_prints_pass_rate_and_failures(tmp_path):

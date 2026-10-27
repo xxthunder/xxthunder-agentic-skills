@@ -86,3 +86,40 @@ def test_snapshot_sees_a_store_commit(tmp_path):
     s = snapshot(tmp_path, "", [])
     assert s.store_commits == [("docs(board): put · demo · 2 (DEMO-002)", [BOARD_FILE])]
     assert ids(s.board_next) == ["DEMO-001", "DEMO-002"]
+
+
+def test_build_seeds_the_adr_log_the_drifted_architecture_and_the_learnings(sandbox):
+    s = snapshot(sandbox, "", [])
+    assert "docs/adr/0001-the-sync-job-runs-from-cron.md" in s.demo_files
+    assert "src/importer/" in s.demo_files["docs/architecture.md"]
+    assert "src/export/__init__.py" in s.demo_files and not any(p.startswith("src/importer") for p in s.demo_files)
+    assert "learnings/2026-10-01_git_archive_exports_commits_only.md" in s.store_files
+    assert "## Learnings" in s.store_files["AGENTS.md"]
+
+
+def test_snapshot_counts_local_commits_from_the_seed_tag(tmp_path):
+    from evals.fixture import git
+
+    build(tmp_path)
+    demo = tmp_path / "checkouts" / "demo"
+    (demo / "x.md").write_text("x\n", encoding="utf-8")
+    git(demo, "add", "x.md")
+    git(demo, "-c", "user.name=E", "-c", "user.email=e@x", "commit", "-q", "-m", "docs: x\n\nbody")
+    s = snapshot(tmp_path, "", [])
+    assert s.demo_local_subjects == ["docs: x"]
+    assert "body" in s.demo_head_message
+    assert s.demo_remote_subjects == []
+
+
+@pytest.mark.parametrize("name", ["commit", "refinement-bootstrap"])
+def test_setup_leaves_a_seed_with_no_local_commits(tmp_path, name):
+    from evals.cases import CASES
+    from evals.fixture import mark_seed
+
+    case = next(c for c in CASES if c.name == name)
+    build(tmp_path)
+    case.setup(tmp_path / "checkouts" / "demo")
+    mark_seed(tmp_path)
+    s = snapshot(tmp_path, "", [])
+    assert s.demo_local_subjects == []
+    assert case.check(s), f"{name} passes on its own setup"

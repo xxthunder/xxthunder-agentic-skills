@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 from evals.cases import Case
-from evals.fixture import build, snapshot
+from evals.fixture import build, mark_seed, snapshot
 
 PLUGIN = "plugins/xxthunder-dev-skills"
 STORE_PREFIXES = ("BOARD", "LOGBOOK", "LEARNINGS")
@@ -60,12 +60,13 @@ def dependency_dirs(plugin: Path, config: Path) -> list[Path]:
     return dirs
 
 
-def clean_env(base: dict[str, str], sandbox: Path, board: bool, logbook: bool) -> dict[str, str]:
+def clean_env(base: dict[str, str], sandbox: Path, board: bool, logbook: bool,
+              learnings: bool = False) -> dict[str, str]:
     pairs = {k[: -len("_REMOTE")] for k in base if k.endswith("_REMOTE")} | set(STORE_PREFIXES)
     env = {k: v for k, v in base.items()
            if k not in PARENT_SESSION and not any(k in (f"{p}_PATH", f"{p}_REMOTE") for p in pairs)}
     env["XDG_CACHE_HOME"] = str(sandbox / "cache")
-    for prefix, wanted in (("BOARD", board), ("LOGBOOK", logbook)):
+    for prefix, wanted in (("BOARD", board), ("LOGBOOK", logbook), ("LEARNINGS", learnings)):
         if wanted:
             env[f"{prefix}_PATH"] = str(sandbox / "store")
             env[f"{prefix}_REMOTE"] = str(sandbox / "remotes" / "store.git")
@@ -81,13 +82,19 @@ def claude_command(prompt: str, plugin_dirs: list[Path], sandbox: Path) -> list[
 
 
 def parse_stream(stream: str) -> tuple[str, list[str]]:
-    """The assistant's text and the skills it invoked, from a stream-json transcript."""
-    output, skills = "", []
+    """The assistant's final answer and the skills it invoked, from a stream-json transcript.
+
+    The output is the `result` event's text, so narration between tool calls is
+    not graded. A run cut off before that event falls back to all of its text.
+    """
+    output, skills, final = "", [], None
     for line in stream.splitlines():
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if event.get("type") == "result" and isinstance(event.get("result"), str):
+            final = event["result"]
         if event.get("type") != "assistant":
             continue
         for block in event["message"].get("content", []):
@@ -95,14 +102,17 @@ def parse_stream(stream: str) -> tuple[str, list[str]]:
                 output += block["text"] + "\n"
             elif block.get("type") == "tool_use" and block.get("name") == "Skill":
                 skills.append(block["input"].get("skill", ""))
-    return output, skills
+    return (output if final is None else final), skills
 
 
 def run_one(case: Case, plugin_dirs: list[Path], n: int, out: Path) -> dict:
     sandbox = out / f"{case.name}-{n}"
     shutil.rmtree(sandbox, ignore_errors=True)
     build(sandbox, case.board_contract)
-    env = clean_env(dict(os.environ), sandbox, case.board, case.logbook)
+    if case.setup:
+        case.setup(sandbox / "checkouts" / "demo")
+        mark_seed(sandbox)
+    env = clean_env(dict(os.environ), sandbox, case.board, case.logbook, case.learnings)
     try:
         r = subprocess.run(claude_command(case.prompt, plugin_dirs, sandbox), cwd=sandbox / "checkouts" / "demo",
                            env=env, capture_output=True, text=True, encoding="utf-8", timeout=TIMEOUT)

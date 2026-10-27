@@ -3,12 +3,16 @@
 Layout under the sandbox directory:
 
     remotes/store.git, remotes/demo.git   bare repos, default branch `develop`
-    store/                                the store's checkout: AGENTS.md, engineering/
+    store/                                the store's checkout: AGENTS.md, engineering/, learnings/
     checkouts/demo/                       the consumer repo, where the session runs
+
+The seed — everything before the session — is tagged `eval-seed` in the demo
+checkout, after a case's own setup; the snapshot counts local commits from there.
 """
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -19,6 +23,7 @@ from evals.board import BOARD_FILE, WEB, board_md, card, parse_board
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 BACKLOG_SCRIPT = Path(__file__).resolve().parents[1] / "plugins" / "xxthunder-dev-skills" / "scripts" / "backlog.py"
 BRANCH = "develop"
+SEED_TAG = "eval-seed"
 IDENTITY = ("-c", "user.name=Eval", "-c", "user.email=eval@example.com")
 
 # file id: (title, status, priority, every criterion ticked)
@@ -93,9 +98,11 @@ def build(sandbox: Path, board_contract: bool = True) -> None:
 
     store = sandbox / "store"
     git(sandbox, "clone", "-q", str(remotes / "store.git"), "store")
-    sections = [(FIXTURES / "logbook-contract.md").read_text(encoding="utf-8")]
+    sections = [(FIXTURES / name).read_text(encoding="utf-8")
+                for name in ("logbook-contract.md", "learnings-contract.md")]
     if board_contract:
         sections.append(sandbox_contract((FIXTURES / "board-contract.md").read_text(encoding="utf-8"), sandbox))
+    shutil.copytree(FIXTURES / "store", store, dirs_exist_ok=True)
     write(store / "AGENTS.md", "# AGENTS.md\n\n" + "\n".join(sections))
     write(store / "engineering" / "repos.md",
           "# Repositories\n\n| Repo | Remote | IDs | What it is |\n|---|---|---|---|\n"
@@ -113,8 +120,36 @@ def build(sandbox: Path, board_contract: bool = True) -> None:
     write(backlog / "README.md", "# Backlog\n\n## Table of Contents\n\n## Notes\n\n**ID prefix**: `DEMO`\n")
     subprocess.run([sys.executable, str(BACKLOG_SCRIPT), "--dir", str(backlog), "toc"], check=True)
     write(demo / "AGENTS.md", "# Demo\n\nNo tests. Conventional commits.\n")
+    shutil.copytree(FIXTURES / "demo", demo, dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("__pycache__"))
     commit_push(demo, "init demo")
     git(demo, "remote", "set-head", "origin", BRANCH)
+    mark_seed(sandbox)
+
+
+def mark_seed(sandbox: Path) -> None:
+    """Tag the demo checkout's HEAD as the seed; a case's setup calls it again."""
+    git(sandbox / "checkouts" / "demo", "tag", "-f", SEED_TAG)
+
+
+def text_files(root: Path) -> dict[str, str]:
+    """Every text file under *root* outside `.git`, keyed by its relative POSIX path."""
+    out = {}
+    for path in root.rglob("*"):
+        rel = path.relative_to(root)
+        if ".git" in rel.parts or "__pycache__" in rel.parts or not path.is_file():
+            continue
+        try:
+            out[rel.as_posix()] = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+    return out
+
+
+def committed_files(bare: Path) -> dict[str, str]:
+    """Every file on the default branch of a bare repo, keyed by path."""
+    return {name: git(bare, "show", f"{BRANCH}:{name}")
+            for name in git(bare, "ls-tree", "-r", "--name-only", BRANCH).splitlines()}
 
 
 @dataclass
@@ -127,6 +162,10 @@ class State:
     demo_remote_subjects: list[str]             # newest first, after the seed
     output: str
     skills: list[str] = field(default_factory=list)
+    demo_local_subjects: list[str] = field(default_factory=list)  # newest first, after the seed tag
+    demo_head_message: str = ""                                  # full message, when there are local commits
+    demo_files: dict[str, str] = field(default_factory=dict)     # working tree of the demo checkout
+    store_files: dict[str, str] = field(default_factory=dict)    # the store's default branch on its remote
 
 
 def snapshot(sandbox: Path, output: str, skills: list[str]) -> State:
@@ -142,5 +181,10 @@ def snapshot(sandbox: Path, output: str, skills: list[str]) -> State:
         m = re.search(r"^\*\*Status\*\*: (.+)$", path.read_text(encoding="utf-8"), re.M)
         status[display_id(path.stem)] = m.group(1) if m else ""
     demo_log = git(sandbox / "remotes" / "demo.git", "log", "--format=%s", BRANCH).splitlines()
+    local = git(demo, "log", "--format=%s", f"{SEED_TAG}..HEAD").splitlines()
     return State(nxt, prog, commits[:-1], status, git(demo, "status", "--porcelain"),
-                 demo_log[:-1], output, skills)
+                 demo_log[:-1], output, skills,
+                 demo_local_subjects=local,
+                 demo_head_message=git(demo, "log", "-1", "--format=%B") if local else "",
+                 demo_files=text_files(demo),
+                 store_files=committed_files(store_bare))
