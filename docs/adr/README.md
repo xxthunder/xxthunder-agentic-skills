@@ -17,6 +17,7 @@ Why this repository looks the way it does. One decision per file, at
 | [0008](0008-the-stores-agents-md-is-the-contract.md) | The store's `AGENTS.md` is the contract | Accepted | 2026-09-18 |
 | [0009](0009-backlog-items-are-the-truth-the-toc-is-derived.md) | Backlog items are the truth; the TOC is derived | Accepted | 2026-10-03 |
 | [0010](0010-other-repositories-are-read-at-origin-head-never-pulled.md) | Other repositories are read at `origin/HEAD`, never pulled | Accepted | 2026-10-21 |
+| [0011](0011-backlog-ops-moves-the-card-on-a-configured-board.md) | `backlog-ops` moves the card on a configured board | Accepted | 2026-10-27 |
 
 ---
 
