@@ -11,6 +11,7 @@
 ### Open
 - [XAS-049 — An eval session before skill changes are pushed](xas-049.md)
 - [XAS-048 — Lint and format a file after the agent saves it](xas-048.md)
+- [XAS-047 — Behavioural evals for the dev skills](xas-047.md)
 - [XAS-044d — Read-only requirements scan for bootstrapping](xas-044d.md)
 - [XAS-044c — `design-record` keeps requirements true, and closing an item changes them](xas-044c.md)
 - [XAS-044b — Item and ADR headers as needs](xas-044b.md)
