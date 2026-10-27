@@ -22,6 +22,7 @@ for skill_dir in sorted(PAPERLESS_SKILLS.iterdir()):
         sys.path.insert(0, str(scripts_dir))
 
 sys.path.insert(0, str(DEV_SCRIPTS))
+sys.path.insert(0, str(REPO_ROOT))  # the `evals` package
 
 
 @pytest.fixture

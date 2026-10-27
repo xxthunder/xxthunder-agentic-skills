@@ -51,6 +51,34 @@ A pull request must meet all of these points:
 8. **You own the content.** Do not submit a plugin branded for a third party
    unless you maintain it and you say so plainly.
 
+## Behavioural evals
+
+`pytest` tests the helper code. It cannot tell whether a skill still does what
+its `SKILL.md` says. The evals under `evals/` check that: each case builds a
+throwaway sandbox, with a store and a consumer repo that both have local bare
+remotes. It runs one prompt headless with `claude -p` against the plugin as it
+is at a git ref, and checks the files, commits and statuses the run leaves behind.
+
+A change to a skill's behaviour needs a case. Write the case first, and check
+that it fails against `develop` before it passes on your branch: a case that
+passes on both tests nothing.
+
+```bash
+uv run --group dev python -m evals list
+uv run --group dev python -m evals run --ref develop --runs 1
+uv run --group dev python -m evals run --ref <your-branch> --runs 3
+uv run --group dev python -m evals report --ref <your-branch>
+```
+
+Every run is a real agent session on your own Claude Code login, so it costs
+tokens and takes minutes. Use `--case <name>` and `-j <n>` to run fewer cases or
+more in parallel. The runner loads no user settings and no MCP servers, and it
+clears every store variable pair (`*_PATH`/`*_REMOTE`) from the environment.
+Plugins that the plugin depends on are taken from your plugin cache, so install
+them first. Results, with each run's transcript, go to
+`<tmp>/xxthunder-evals/<ref>/`, outside the checkout. Record the pass rates in
+the pull request.
+
 ## What this repository does not accept
 
 These pull requests are closed without a detailed review:
@@ -77,6 +105,7 @@ Then check:
 - [ ] The skill adds a capability, not documentation.
 - [ ] No hardcoded paths. Shell works on Windows and Linux.
 - [ ] `uv run --group dev pytest` passes.
+- [ ] A behaviour change in a skill has an eval case; its pass rates are in the pull request.
 - [ ] Versions bumped in `plugin.json` and `marketplace.json`.
 - [ ] Backlog item added or referenced.
 - [ ] README skill table and trigger list updated.
