@@ -106,8 +106,9 @@ shown as written, with no status.
 
 ## `show`
 
-Resolve, read the contract, read the items. Then print the board as a table
-with the board's own columns, in the board's order. Each card shows its
+Resolve, read the contract, read the items. Then print the board as **one**
+table with the board's own header row — the contract's columns side by side,
+never one table per column — in the board's order. Each card is one cell: its
 address, its title and its reason as the board has them, plus status and
 priority read from its item.
 
@@ -154,7 +155,9 @@ No contradictions → say so in one line. `show` never changes anything.
 1. Resolve and read the contract.
 2. Not on the board → say so and stop.
 3. Remove the card from its column, keeping every other card exactly as it
-   was, in the layout the contract names; commit and push as in `put`.
+   was, in the layout the contract names; commit and push as in `put`. A
+   reason is the author's if they gave one; never ask for one — without it,
+   the subject takes what the contract names for that case.
 
 ## What This Skill Never Does
 
