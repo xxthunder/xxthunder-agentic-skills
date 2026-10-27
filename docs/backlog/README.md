@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-050 — Eval sessions get only the permissions the sandbox needs](xas-050.md)
 - [XAS-049 — An eval session before skill changes are pushed](xas-049.md)
 - [XAS-048 — Lint and format a file after the agent saves it](xas-048.md)
 - [XAS-044d — Read-only requirements scan for bootstrapping](xas-044d.md)
@@ -35,7 +36,6 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
-- [XAS-047 — Behavioural evals for the dev skills](xas-047.md)
 - [XAS-046 — Kanban as code: `next` shows a board, `backlog-ops` moves its cards](xas-046.md)
 - [XAS-032 — Establish whether `retrospective` triggers in practice](xas-032.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
@@ -45,6 +45,7 @@
 - [XAS-001 — Backlog refinement](xas-001.md)
 
 ### Done
+- [XAS-047 — Behavioural evals for the dev skills](xas-047.md)
 - [XAS-045 — Store contracts may live in a file the store's `AGENTS.md` imports](xas-045.md)
 - [XAS-043 — `backlog.py` drops text after the link in a table-of-contents line](xas-043.md)
 - [XAS-042 — `next` does not report the standing refinement item](xas-042.md)
