@@ -15,7 +15,7 @@ flowchart LR
     host["Coding-agent host<br/>(Claude Code)"]
     mkt["xxthunder-agentic-skills<br/>marketplace"]
     consumer["Consuming repositories"]
-    store["Personal knowledge store / logbook<br/>(configured per machine)"]
+    store["Personal knowledge store / logbook / board<br/>(configured per machine)"]
     sp["superpowers<br/>(claude-plugins-official)"]
     naps["NAPS2.Console"]
     ci["GitHub Actions + Codecov"]
@@ -23,7 +23,7 @@ flowchart LR
     dev --> host
     host -->|installs from| mkt
     host -->|acts on| consumer
-    host -->|learnings, logbook, next write to| store
+    host -->|learnings, logbook, next, backlog-ops write to| store
     mkt -->|dev-skills requires| sp
     host -->|paperless skills drive| naps
     mkt --> ci
@@ -31,8 +31,8 @@ flowchart LR
 
 A maintainer works through a coding-agent host. The host installs plugins from
 this marketplace and acts on a consuming repository. Through `learnings`,
-`logbook` and `next` it also writes to the maintainer's personal knowledge store and
-logbook — git repos (one or two) the host knows only from the user's own
+`logbook`, `next` and `backlog-ops` it also writes to the maintainer's personal knowledge
+store, logbook and board — git repos (one or several) the host knows only from the user's own
 settings, never from any consuming repository (ADR-0007). `xxthunder-dev-skills` declares a hard dependency on `superpowers`,
 which lives in a different marketplace. The paperwork skills drive NAPS2.Console locally. CI runs on
 GitHub Actions with coverage reported to Codecov.
@@ -74,8 +74,10 @@ flowchart TB
         retro -.what holds beyond.-> learn["learnings"]
         backlog -.suggests start/done.-> logb["logbook"]
         logb -.done asks.-> learn
-        logb -.done suggests drop.-> nxt["next"]
+        backlog -.moves card.-> board[("board")]
+        nxt["next"] -.shows, puts, drops.-> board
         nxt --> storesh
+        backlog --> storesh
         nxt --> backpy
         learn --> storesh["scripts/store"]
         logb --> storesh
@@ -103,16 +105,17 @@ resolves a cross-repo store from a variable pair (`<PREFIX>_PATH`,
 `<PREFIX>_REMOTE`), prints a contract section from the store's `AGENTS.md`
 or any file it pulls in with an `@path` import line (one section in one place,
 XAS-045), and commits-and-pushes into it, with one rebase retry.
-`learnings` calls it with the `LEARNINGS` prefix, `logbook` and `next` with
-`LOGBOOK`; the two stores may be one repo or two. `backlog.py` is a PEP 723 Python script
+`learnings` calls it with the `LEARNINGS` prefix, `logbook` with `LOGBOOK`,
+`next` and `backlog-ops` with `BOARD`; the stores may be one repo or several. `backlog.py` is a PEP 723 Python script
 run with `uv run`; `refinement` and `backlog-ops` call it for every mechanical
 backlog step — allocating an ID, setting a status with its epic cascade,
 regenerating the README table of contents from the item files (ADR-0009), and
 checking the backlog. `next` calls its one read-only command, `show`, which
-prints an item's ID, status, priority and title — with `--in-progress`, only
-the items In Progress as work, epics and the standing refinement item left
-out; with `--repo`, for another repository, read at its remote's default
-branch without touching its working tree. Mechanics with a right answer live in the scripts and
+prints an item's ID, status, priority and title — with `--repo`, for another
+repository, read at its remote's default branch without touching its working
+tree. `backlog-ops` calls `show --in-progress <ID>` before it makes a card on a
+pull: it prints only an item In Progress as work, epics and the standing
+refinement item left out, and its title is the card's. Mechanics with a right answer live in the scripts and
 are tested; judgment — running a store's tests for a learning, drafting from
 its template, finding the right place for a log line, wording an item — stays
 in `SKILL.md`.
@@ -126,11 +129,13 @@ which is why a rule lives in exactly one of them.
 mechanics-only; `design-record` is the sole writer of the record;
 `architecture-scan` is read-only and proposes into it; `commit-helper` sits at
 the boundary of a change. `learnings`, `logbook` and `next` are the three skills whose
-output leaves the consuming repository: they write to their store and nothing
-else, under the store's own rules (ADR-0008). `backlog-ops` reaches `logbook`
-by suggestion only — one line after a pull, one after a close — the same seam
-`commit-helper` uses towards `design-record`; `logbook` reaches `next` the same
-way, suggesting a `drop` after `done`.
+output is a store: they write to their store and nothing
+else, under the store's own rules (ADR-0008). `backlog-ops` is the one skill
+that writes both: its own repository, and — when a board is configured — one
+commit in the board's store per pull and per close, moving the item's card
+(ADR-0011). It reaches `logbook` by suggestion only — one line after a pull,
+one after a close — the same seam `commit-helper` uses towards `design-record`.
+The board and the logbook know nothing of each other.
 
 **`xxthunder-paperless-skills`** — three skills carrying eight PEP 723 helper
 scripts run via `uv run`: `naps2-scan` (3 scripts), `simplex-merge` (1),
@@ -194,17 +199,25 @@ sequenceDiagram
     participant C as commit-helper
     participant D as Default branch
     participant F as Feature branch
+    participant K as Board store (if configured)
     U->>B: pull ID
     B->>C: staged pull, alone
     C->>D: docs(backlog): pull ID, pushed
+    B->>K: card into In Progress, commit-push
     D->>F: branch from the pushed pull
     U->>C: code
     C->>F: feat/fix … (ID)
     U->>B: close ID
     B->>C: staged close
+    B->>K: card off the board, commit-push
     C->>F: docs(backlog): close ID, last commit
     F->>D: merge closes the item
 ```
+
+With a board configured, the card follows the transition at once: into the
+in-progress column on the pull, off the board on the close — before the merge,
+so for the life of the pull request the item is In Progress on the default
+branch with no card (ADR-0011). Without one, those two steps do not happen.
 
 Where the repository's rules send backlog changes through a pull request, or
 the push is refused, the pull stays staged and rides on the feature branch.
@@ -292,40 +305,39 @@ sequenceDiagram
     participant U as Maintainer
     participant N as next
     participant S as scripts/store
-    participant K as Store (git)
-    participant R as Repo on the list
+    participant K as Board store (git)
+    participant R as Repo with a card
     participant P as scripts/backlog.py
     U->>N: /next
-    N->>S: resolve LOGBOOK
+    N->>S: resolve BOARD
     S-->>N: store path (pulled)
-    N->>S: contract → Next
+    N->>S: contract → Board
     S->>K: read AGENTS.md and its imports
-    N->>K: read the list, the open starts in the log
-    loop each repo named
+    N->>K: read the board
+    loop each repo with a card
         alt not cloned
             N-->>U: clone it? — no leaves it out
         end
         N->>P: --repo checkout show
         P->>R: fetch, set origin/HEAD, read docs/backlog there
         P-->>N: ID, status, priority, title
-        N->>P: --repo checkout show --in-progress
-        P-->>N: the items In Progress as work
     end
-    N-->>U: in progress, next, contradictions
+    N-->>U: the board with status and priority, contradictions
     U->>N: put ITEM after OTHER
-    N->>K: list renumbered, commit-push
+    N->>K: card moved, commit-push
 ```
 
-The list holds only the order; status, priority and title are read from each
-item every time. A repo on the list is fetched and read at `origin/HEAD`, never
-pulled, by `backlog.py` (ADR-0010): another session may be working in that checkout, and its working tree,
-index and `HEAD` stay as they were. Only the store is pulled, by the resolver,
-because the list is written there. Line format, checkout location and the
-in-progress source come from the store's `AGENTS.md` (ADR-0008); so the
-script says which items are In Progress as work, and the skill compares them
-with the log. `show`
-reports contradictions between list, backlogs and log rather than smoothing
-them over, and writes nothing.
+A card holds the link to its item, the item's title and the author's reason;
+status and priority are read from each item every time, and a title that has
+drifted from its item is reported. A repo with a card is fetched and read at
+`origin/HEAD`, never pulled, by `backlog.py` (ADR-0010): another session may
+be working in that checkout, and its working tree, index and `HEAD` stay as
+they were. Only the store is pulled, by the resolver, because the board is
+written there. Columns, card format, link, checkout location and commit
+subject come from the store's `AGENTS.md` (ADR-0008). `show` reports
+contradictions between the board and the backlogs rather than smoothing them
+over, and writes nothing. `backlog-ops` moves cards on pull and close
+(ADR-0011); `next` places and drops them by hand.
 
 ### Digitising paperwork
 
