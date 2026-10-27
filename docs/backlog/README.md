@@ -36,7 +36,6 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
-- [XAS-032 — Establish whether `retrospective` triggers in practice](xas-032.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
 - [XAS-027 — Agentic Engineering-as-Code — durable design record](xas-027.md)
 - [XAS-026 — CI / GitHub Actions setup](xas-026.md)
@@ -56,6 +55,7 @@
 - [XAS-035 — `logbook` skill: chronicle what each session starts, notes and finishes, across repos](xas-035.md)
 - [XAS-034 — `learnings` skill: capture what outlives a repo into a personal knowledge repo](xas-034.md)
 - [XAS-033 — Backlog TOC invariant tests](xas-033.md)
+- [XAS-032 — Establish whether `retrospective` triggers in practice](xas-032.md)
 - [XAS-031 — `commit-helper` cites the verification gate instead of restating it](xas-031.md)
 - [XAS-030 — Remove `tdd-workflow`](xas-030.md)
 - [XAS-028 — Declare the `superpowers` dependency in the marketplace](xas-028.md)
