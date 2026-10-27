@@ -28,12 +28,12 @@ Developer workflow skills:
 | Skill | Description |
 |---|---|
 | [**architecture-scan**](plugins/xxthunder-dev-skills/skills/architecture-scan/SKILL.md) | Read-only scan — derives real structure from the repo, proposes a bootstrap when `architecture.md` is absent, reports drift when it is not |
-| [**backlog-ops**](plugins/xxthunder-dev-skills/skills/backlog-ops/SKILL.md) | Lifecycle operations on backlog items — pull, tick acceptance/UAT criteria, close with epic-status cascade |
+| [**backlog-ops**](plugins/xxthunder-dev-skills/skills/backlog-ops/SKILL.md) | Lifecycle operations on backlog items — pull, tick acceptance/UAT criteria, close with epic-status cascade; moves the item's card on a configured board at pull and close |
 | [**commit-helper**](plugins/xxthunder-dev-skills/skills/commit-helper/SKILL.md) | Conventional commit creation with mandatory pre-commit checks |
 | [**design-record**](plugins/xxthunder-dev-skills/skills/design-record/SKILL.md) | Durable design record — drafts ADRs with numbering and a derived index, and edits the slotted `architecture.md` |
 | [**learnings**](plugins/xxthunder-dev-skills/skills/learnings/SKILL.md) | Captures what outlives a repository into the author's personal knowledge repo — configured on the machine, never named in any repo — and recalls it at the start of a topic |
 | [**logbook**](plugins/xxthunder-dev-skills/skills/logbook/SKILL.md) | Chronicles what each session starts, notes and finishes into the author's logbook repo — one line per event, across all repositories; suggested by `backlog-ops` at pull and close |
-| [**next**](plugins/xxthunder-dev-skills/skills/next/SKILL.md) | Shows what is in progress and what comes next across all repositories — one ranked list in the logbook's store, each item's status and priority read fresh from its own backlog at `origin/HEAD` |
+| [**next**](plugins/xxthunder-dev-skills/skills/next/SKILL.md) | Shows the Kanban board — what comes next and what is in progress across all repositories — from one board file in its own store, each card's status and priority read fresh from its own backlog at `origin/HEAD` |
 | [**refinement**](plugins/xxthunder-dev-skills/skills/refinement/SKILL.md) | Interactive backlog refinement sessions — review project state, prioritize work, add new items, discuss architecture |
 | [**retrospective**](plugins/xxthunder-dev-skills/skills/retrospective/SKILL.md) | Incident-driven learning — captures lessons from unmet expectations and encodes them into project guidelines |
 
@@ -46,8 +46,8 @@ It also ships one plugin-level script, `scripts/store`, which resolves a
 cross-repo store from a variable pair (`<PREFIX>_PATH`, `<PREFIX>_REMOTE`),
 reads a contract section from the store's `AGENTS.md` or a file it imports with
 `@path`, and commits-and-pushes into it. `learnings` uses it with the `LEARNINGS` prefix,
-`logbook` and `next` with `LOGBOOK`; the stores themselves are configured in the user's
-settings, never in a repository, and may be one repo or two.
+`logbook` with `LOGBOOK`, `next` and `backlog-ops` with `BOARD`; the stores themselves are
+configured in the user's settings, never in a repository, and may be one repo or several.
 
 It is orientation, not enforcement: it never blocks work. It is also **silent in
 repositories that use none of these conventions**, so installing the plugin
@@ -131,7 +131,7 @@ Skills trigger automatically based on conversation context, or can be invoked ex
 - [**design-record**](plugins/xxthunder-dev-skills/skills/design-record/SKILL.md): "record an ADR", "document this decision", "update the architecture doc"
 - [**learnings**](plugins/xxthunder-dev-skills/skills/learnings/SKILL.md): "capture that", "that's a learning", "what do I know about X" — also proposed when the author corrects the agent
 - [**logbook**](plugins/xxthunder-dev-skills/skills/logbook/SKILL.md): "log the start", "log that …", "log the close" — qualified phrases only; suggested by `backlog-ops` after a pull and after a close
-- [**next**](plugins/xxthunder-dev-skills/skills/next/SKILL.md): "/next", "what's next", "was steht an" — about the work across repos; "put HSH-089 next", "drop X from the next list"
+- [**next**](plugins/xxthunder-dev-skills/skills/next/SKILL.md): "/next", "what's next", "was steht an" — about the work across repos; "put HSH-089 next", "drop X from the board"
 - [**refinement**](plugins/xxthunder-dev-skills/skills/refinement/SKILL.md): "let's refine", "backlog refinement", "what should we work on next?"
 - [**retrospective**](plugins/xxthunder-dev-skills/skills/retrospective/SKILL.md): "I'm not happy with...", "that's wrong", "why did you...?"
 
