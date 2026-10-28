@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-051 — `refinement` triggers on a request for a new backlog item](xas-051.md)
 - [XAS-050 — Eval sessions get only the permissions the sandbox needs](xas-050.md)
 - [XAS-049 — An eval session before skill changes are pushed](xas-049.md)
 - [XAS-048 — Lint and format a file after the agent saves it](xas-048.md)
