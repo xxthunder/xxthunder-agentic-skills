@@ -9,7 +9,7 @@
 ## Table of Contents
 
 ### Open
-- [XAS-052 — The backlog's table of contents is split by status](xas-052.md)
+- [XAS-052 — Agents read the backlog through `backlog.py`, not its files](xas-052.md)
 - [XAS-051 — `refinement` triggers on a request for a new backlog item](xas-051.md)
 - [XAS-050 — Eval sessions get only the permissions the sandbox needs](xas-050.md)
 - [XAS-049 — An eval session before skill changes are pushed](xas-049.md)
