@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-053 — The board shows Jira issues next to backlog items](xas-053.md)
 - [XAS-052 — Agents read the backlog through `backlog.py`, not its files](xas-052.md)
 - [XAS-051 — A new backlog item comes from `backlog.py new`, and `refinement` triggers on a request for one](xas-051.md)
 - [XAS-050 — Eval sessions get only the permissions the sandbox needs](xas-050.md)
