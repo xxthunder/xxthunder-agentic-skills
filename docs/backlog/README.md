@@ -9,7 +9,6 @@
 ## Table of Contents
 
 ### Open
-- [XAS-053 — The board shows Jira issues next to backlog items](xas-053.md)
 - [XAS-052 — Agents read the backlog through `backlog.py`, not its files](xas-052.md)
 - [XAS-051 — A new backlog item comes from `backlog.py new`, and `refinement` triggers on a request for one](xas-051.md)
 - [XAS-050 — Eval sessions get only the permissions the sandbox needs](xas-050.md)
@@ -39,6 +38,7 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
+- [XAS-053 — The board shows Jira issues next to backlog items](xas-053.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
 - [XAS-027 — Agentic Engineering-as-Code — durable design record](xas-027.md)
 - [XAS-026 — CI / GitHub Actions setup](xas-026.md)
