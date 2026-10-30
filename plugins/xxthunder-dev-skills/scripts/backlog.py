@@ -42,6 +42,23 @@ TOC_HEADING = "## Table of Contents"
 BACKLOG_IN_REPO = "docs/backlog"
 REMOTE = "origin"
 REFINEMENT_TITLE = "Backlog refinement"
+PRIORITIES = ("High", "Medium", "Low", "—")
+SKELETON = """\
+# [{id}] {title}
+
+**Status**: Open
+**Priority**: {priority}
+**Component**: [path/to/affected/file]
+
+**Summary**:
+As a [user role], I want [feature] so that [benefit].
+
+**Description**:
+[Problem statement. Current behavior. Why this matters.]
+
+**Acceptance Criteria**:
+- [ ] [First verifiable criterion]
+"""
 
 
 class BacklogError(Exception):
@@ -198,6 +215,25 @@ def next_id(backlog: Path, parent: str | None = None) -> str:
     letters = [letter for p, n, letter in parts if p == pre and n == number and letter]
     following = chr(ord(max(letters)) + 1) if letters else "a"
     return f"{parent.upper()}{following}"
+
+
+def new_item(backlog: Path, title: str, parent: str | None = None, priority: str = "Medium") -> Path:
+    """Write a new Open item from the skeleton under the next free ID, or the next
+    substory ID under *parent*, and rewrite the TOC; return the item's path.
+
+    Everything that can refuse is checked before the first file is written.
+    """
+    title = title.strip()
+    if not title or "\n" in title:
+        raise BacklogError(f"title {title!r} is not one line of text")
+    if priority not in PRIORITIES:
+        raise BacklogError(f"unknown priority {priority!r}; use one of {', '.join(PRIORITIES)}")
+    derived_readme(backlog)
+    item_id = next_id(backlog, parent)
+    path = backlog / f"{item_id.lower()}.md"
+    write_text(path, SKELETON.format(id=item_id, title=title, priority=priority), crlf=False)
+    write_toc(backlog)
+    return path
 
 
 def item_path(backlog: Path, item_id: str) -> Path:
@@ -431,6 +467,10 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     p_next = sub.add_parser("next-id", help="print the next free ID, or the next substory ID under PARENT")
     p_next.add_argument("parent", nargs="?")
+    p_new = sub.add_parser("new", help="write a new Open item from the skeleton, rewrite the TOC, print its path")
+    p_new.add_argument("title")
+    p_new.add_argument("--parent", help="make it the next substory of this top-level item")
+    p_new.add_argument("--priority", choices=PRIORITIES, default="Medium")
     p_set = sub.add_parser("set-status", help="set an item's status, cascade to its epic, rewrite the TOC")
     p_set.add_argument("id")
     p_set.add_argument("status", choices=SECTIONS)
@@ -452,6 +492,8 @@ def main(argv: list[str] | None = None) -> int:
         b = args.dir or find_backlog(Path.cwd())
         if args.command == "next-id":
             print(next_id(b, args.parent))
+        elif args.command == "new":
+            print(new_item(b, args.title, args.parent, args.priority))
         elif args.command == "set-status":
             for message in set_status(b, args.id, args.status, args.date):
                 print(message)

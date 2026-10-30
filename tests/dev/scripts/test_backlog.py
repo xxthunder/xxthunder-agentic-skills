@@ -314,6 +314,132 @@ def test_next_id_refuses_a_backlog_without_an_id_prefix_note(tmp_path):
         backlog.next_id(b)
 
 
+# ---------- new ----------
+
+
+def skeleton(iid: str, title: str, priority: str = "Medium") -> str:
+    return (
+        f"# [{iid}] {title}\n\n"
+        "**Status**: Open\n"
+        f"**Priority**: {priority}\n"
+        "**Component**: [path/to/affected/file]\n\n"
+        "**Summary**:\n"
+        "As a [user role], I want [feature] so that [benefit].\n\n"
+        "**Description**:\n"
+        "[Problem statement. Current behavior. Why this matters.]\n\n"
+        "**Acceptance Criteria**:\n"
+        "- [ ] [First verifiable criterion]\n"
+    )
+
+
+def test_new_writes_the_next_top_level_item_open_and_lists_it(tmp_path):
+    b = make_backlog(tmp_path, [("SC-003", "Three", "Open")], toc="### Open\n- [SC-003 — Three](sc-003.md)\n\n")
+
+    path = backlog.new_item(b, "Retry the sync job")
+
+    assert path == b / "sc-004.md"
+    assert path.read_text(encoding="utf-8") == skeleton("SC-004", "Retry the sync job")
+    assert "### Open\n- [SC-004 — Retry the sync job](sc-004.md)\n- [SC-003 — Three](sc-003.md)\n" in readme(b)
+    assert backlog.check(b) == []
+
+
+def test_new_under_a_parent_writes_the_next_substory(tmp_path):
+    b = make_backlog(tmp_path, [("SC-003", "Epic", "In Progress"), ("SC-003a", "Sub a", "Done (2026-01-01)")])
+
+    path = backlog.new_item(b, "Sub b", parent="SC-003")
+
+    assert path == b / "sc-003b.md"
+    assert path.read_text(encoding="utf-8") == skeleton("SC-003b", "Sub b")
+    assert "- [SC-003b — Sub b](sc-003b.md)" in readme(b)
+
+
+def test_new_first_substory_under_a_story_takes_letter_a(tmp_path):
+    b = make_backlog(tmp_path, [("SC-003", "Story", "Open")])
+
+    path = backlog.new_item(b, "First piece", parent="SC-003")
+
+    assert path == b / "sc-003a.md"
+    assert path.read_text(encoding="utf-8") == skeleton("SC-003a", "First piece")
+
+
+def test_new_takes_a_priority(tmp_path):
+    b = make_backlog(tmp_path, [])
+
+    path = backlog.new_item(b, "Urgent", priority="High")
+
+    assert path.read_text(encoding="utf-8") == skeleton("SC-001", "Urgent", "High")
+
+
+def test_new_strips_the_title(tmp_path):
+    b = make_backlog(tmp_path, [])
+
+    assert backlog.parse_item(backlog.new_item(b, "  Padded  ")).title == "Padded"
+
+
+@pytest.mark.parametrize("title", ["", "   ", "Two\nlines"])
+def test_new_refuses_a_title_that_is_not_one_line_of_text_and_writes_nothing(tmp_path, title):
+    b = make_backlog(tmp_path, [])
+    before = readme(b)
+
+    with pytest.raises(backlog.BacklogError, match="title"):
+        backlog.new_item(b, title)
+
+    assert readme(b) == before
+    assert backlog.item_files(b) == []
+
+
+def test_new_refuses_a_parent_that_does_not_exist_and_writes_nothing(tmp_path):
+    b = make_backlog(tmp_path, [("SC-003", "Story", "Open")])
+    before = readme(b)
+
+    with pytest.raises(backlog.BacklogError, match="SC-004"):
+        backlog.new_item(b, "Orphan", parent="SC-004")
+
+    assert readme(b) == before
+    assert [p.name for p in backlog.item_files(b)] == ["sc-003.md"]
+
+
+def test_new_refuses_a_backlog_whose_toc_it_cannot_derive_and_writes_nothing(tmp_path):
+    b = make_backlog(tmp_path, [("SC-001", "One", "Open")], toc="### Open\n- a hand-written note\n\n")
+    before = readme(b)
+
+    with pytest.raises(backlog.BacklogError, match="not derived from an item"):
+        backlog.new_item(b, "Two")
+
+    assert readme(b) == before
+    assert [p.name for p in backlog.item_files(b)] == ["sc-001.md"]
+
+
+def test_new_refuses_a_backlog_with_an_unreadable_item_and_writes_nothing(tmp_path):
+    b = make_backlog(tmp_path, [("SC-001", "One", "Open")])
+    (b / "sc-001.md").write_text("no heading\n", encoding="utf-8")
+    before = readme(b)
+
+    with pytest.raises(backlog.BacklogError, match="sc-001.md"):
+        backlog.new_item(b, "Two")
+
+    assert readme(b) == before
+    assert [p.name for p in backlog.item_files(b)] == ["sc-001.md"]
+
+
+def test_new_refuses_a_backlog_without_an_id_prefix_and_writes_nothing(tmp_path):
+    b = make_backlog(tmp_path, [], notes="## Notes\n\nNone.\n")
+
+    with pytest.raises(backlog.BacklogError, match="ID prefix"):
+        backlog.new_item(b, "One")
+
+    assert backlog.item_files(b) == []
+
+
+def test_new_keeps_crlf_in_the_readme(tmp_path):
+    b = make_backlog(tmp_path, [])
+    (b / "README.md").write_bytes(readme(b).replace("\n", "\r\n").encode("utf-8"))
+
+    backlog.new_item(b, "One")
+
+    assert "- [SC-001 — One](sc-001.md)\r\n".encode("utf-8") in (b / "README.md").read_bytes()
+
+
 # ---------- set-status ----------
 
 TODAY = "2026-10-03"
@@ -860,6 +986,24 @@ def test_cli_show_prints_the_items_and_fails_on_a_missing_one(tmp_path, capsys):
     out, err = capsys.readouterr()
     assert out == "SC-001\tOpen\t—\tFirst\n"
     assert err == "backlog: SC-009: no such item\n"
+
+
+def test_cli_new_prints_the_path_of_the_new_item(tmp_path, capsys):
+    b = make_backlog(tmp_path, [("SC-003", "Story", "Open")])
+
+    assert backlog.main(["--dir", str(b), "new", "Next story", "--priority", "Low"]) == 0
+    assert backlog.main(["--dir", str(b), "new", "A piece", "--parent", "SC-003"]) == 0
+    assert capsys.readouterr().out == f"{b / 'sc-004.md'}\n{b / 'sc-003a.md'}\n"
+    assert "**Priority**: Low" in item(b, "SC-004")
+
+
+def test_cli_new_refusal_goes_to_stderr_and_fails(tmp_path, capsys):
+    b = make_backlog(tmp_path, [])
+
+    assert backlog.main(["--dir", str(b), "new", "Orphan", "--parent", "SC-009"]) == 1
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert "SC-009" in err
 
 
 def test_cli_set_status_prints_what_changed(tmp_path, capsys):
