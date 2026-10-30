@@ -179,9 +179,10 @@ output is applied by `design-record`.
 
 ### Backlog lifecycle
 
-`refinement` authors items; `backlog-ops` performs every status mutation
-through `scripts/backlog.py`, which applies the epic cascade and regenerates the
-README table of contents from the items;
+`refinement` authors items — `scripts/backlog.py new` allocates the ID, writes
+the skeleton and lists it, and the agent writes the free text; `backlog-ops`
+performs every status mutation through `scripts/backlog.py`, which applies the
+epic cascade and regenerates the README table of contents from the items;
 `commit-helper` commits what it stages.
 Neither authors content.
 

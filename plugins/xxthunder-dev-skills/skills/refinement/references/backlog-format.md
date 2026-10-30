@@ -93,6 +93,8 @@ uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" <command>
 
 | Command | What it does |
 |---------|--------------|
+| `new "TITLE" [--priority P]` | Creates the next top-level item: allocates its ID, writes the [Open entry](#open-entry) skeleton with `**Status**: Open` and priority `P` (default `Medium`), regenerates the TOC and prints the new file's path. Refuses — writing nothing — when the title is not one line or the backlog cannot be read |
+| `new "TITLE" --parent PREFIX-NNN` | The same for the next substory under `PREFIX-NNN` |
 | `next-id` | Prints the next free top-level ID; the prefix comes from the README's Notes |
 | `next-id PREFIX-NNN` | Prints the next substory ID under `PREFIX-NNN` |
 | `set-status ID STATUS` | Sets `Open`, `"In Progress"`, `Done` or `Superseded` — status line, date, heading marker, epic cascade — and regenerates the TOC |
@@ -127,9 +129,13 @@ Examples:
 
 ### Allocating the next ID
 
-**New top-level item**: `next-id`. It takes the highest number among the backlog's own prefix and adds one.
+A new item gets its ID from `new`, which allocates it and writes the file in one step. The ID, the skeleton and the TOC line are the script's; the agent writes the free text into the file `new` printed.
 
-**New substory under `PREFIX-NNN`**: `next-id PREFIX-NNN`. It advances past the latest letter used, or starts at `a`. If the parent is currently a standalone story, no rename is needed — adding the first substory implicitly promotes it.
+**New top-level item**: `new "TITLE"`. It takes the highest number among the backlog's own prefix and adds one.
+
+**New substory under `PREFIX-NNN`**: `new "TITLE" --parent PREFIX-NNN`. It advances past the latest letter used, or starts at `a`. If the parent is currently a standalone story, no rename is needed — adding the first substory implicitly promotes it.
+
+`next-id` prints the same ID without writing anything.
 
 ### Back-reference fields (do not use)
 

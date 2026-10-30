@@ -132,7 +132,7 @@ Skills trigger automatically based on conversation context, or can be invoked ex
 - [**learnings**](plugins/xxthunder-dev-skills/skills/learnings/SKILL.md): "capture that", "that's a learning", "what do I know about X" — also proposed when the author corrects the agent
 - [**logbook**](plugins/xxthunder-dev-skills/skills/logbook/SKILL.md): "log the start", "log that …", "log the close" — qualified phrases only; suggested by `backlog-ops` after a pull and after a close
 - [**next**](plugins/xxthunder-dev-skills/skills/next/SKILL.md): "/next", "what's next", "was steht an" — about the work across repos; "put HSH-089 next", "drop X from the board"
-- [**refinement**](plugins/xxthunder-dev-skills/skills/refinement/SKILL.md): "let's refine", "backlog refinement", "what should we work on next?"
+- [**refinement**](plugins/xxthunder-dev-skills/skills/refinement/SKILL.md): "let's refine", "backlog refinement", "what should we work on next?"; "create a new item for X", "Neues Issue für X" — one item, straight to New Ideas
 - [**retrospective**](plugins/xxthunder-dev-skills/skills/retrospective/SKILL.md): "I'm not happy with...", "that's wrong", "why did you...?"
 
 **xxthunder-paperless-skills**
