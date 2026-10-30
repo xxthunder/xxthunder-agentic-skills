@@ -95,16 +95,19 @@ def test_claude_command_isolates_settings_and_loads_the_plugins(tmp_path):
     assert cmd[cmd.index("--output-format") + 1] == "stream-json"
 
 
-def test_parse_stream_collects_text_and_skill_calls():
+def test_parse_stream_collects_text_skill_calls_and_bash_commands():
     events = [
         {"type": "system", "subtype": "init"},
         {"type": "assistant", "message": {"content": [
             {"type": "tool_use", "name": "Skill", "input": {"skill": "xxthunder-dev-skills:next"}},
             {"type": "text", "text": "The board:"}]}},
-        {"type": "assistant", "message": {"content": [{"type": "text", "text": "done"}]}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Bash", "input": {"command": "git status"}},
+            {"type": "tool_use", "name": "Read", "input": {"file_path": "x"}},
+            {"type": "text", "text": "done"}]}},
     ]
     stream = "\n".join(json.dumps(e) for e in events) + "\nnot json\n"
-    assert parse_stream(stream) == ("The board:\ndone\n", ["xxthunder-dev-skills:next"])
+    assert parse_stream(stream) == ("The board:\ndone\n", ["xxthunder-dev-skills:next"], ["git status"])
 
 
 def test_parse_stream_output_is_the_final_answer_when_the_run_finished():
@@ -114,7 +117,7 @@ def test_parse_stream_output_is_the_final_answer_when_the_run_finished():
         {"type": "result", "subtype": "success", "result": "Pulled DEMO-007."},
     ]
     stream = "\n".join(json.dumps(e) for e in events)
-    assert parse_stream(stream) == ("Pulled DEMO-007.", [])
+    assert parse_stream(stream) == ("Pulled DEMO-007.", [], [])
 
 
 def test_report_prints_pass_rate_and_failures(tmp_path):

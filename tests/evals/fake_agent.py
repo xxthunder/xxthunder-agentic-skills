@@ -1,6 +1,6 @@
 """A stand-in for `claude -p`: prints a stream-json transcript and acts on the prompt.
 
-    report  narrate, call a skill, answer with what the session sees
+    report  narrate, call a skill and run `git status`, answer with what the session sees
     pull    move DEMO-007 to In Progress in the working tree, answer "Pulled DEMO-007."
     sleep   narrate, then hang until the runner gives up
 """
@@ -34,7 +34,8 @@ def main() -> None:
         answer = "Pulled DEMO-007."
     else:
         emit({"type": "assistant", "message": {"content": [
-            {"type": "tool_use", "name": "Skill", "input": {"skill": "xxthunder-dev-skills:next"}}]}})
+            {"type": "tool_use", "name": "Skill", "input": {"skill": "xxthunder-dev-skills:next"}},
+            {"type": "tool_use", "name": "Bash", "input": {"command": "git status"}}]}})
         answer = json.dumps({"cwd": os.getcwd(),
                              **{k: os.environ.get(k) for k in ("BOARD_PATH", "LOGBOOK_PATH", "CLAUDECODE")}})
     print("a warning on stderr", file=sys.stderr)

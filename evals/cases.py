@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Callable
 
 from evals.board import BOARD_FILE, card, ids
-from evals.fixture import INITIAL_NEXT, State
+from evals.fixture import INITIAL_NEXT, ITEMS, State
 
 LOG_FILE = "engineering/log.md"
 HUB_FILE = "learnings/README.md"
@@ -308,6 +308,25 @@ def check_refine_summary(s: State) -> list[str]:
                      "an open or in-progress item is missing from the summary"))
 
 
+NEW_ITEM = "docs/backlog/demo-008.md"
+BACKLOG_NEW_RE = re.compile(r"backlog\.py[\"']?\s+(?:--dir\s+\S+\s+)?new\s")
+PLACEHOLDER_RE = re.compile(r"\[(?:path/to/affected/file|user role|feature|benefit|Problem statement[^\]]*|First verifiable criterion)\]")
+
+
+def check_new_item(s: State) -> list[str]:
+    item = s.demo_files.get(NEW_ITEM, "")
+    readme = s.demo_files.get("docs/backlog/README.md", "")
+    extra = [p for p in new_files(s, "docs/backlog/demo-") if p != NEW_ITEM and p.split("/")[-1][:-3] not in ITEMS]
+    return (no_store_commit(s) + no_local_commit(s) + invoked(s, "refinement")
+            + expect(not s.demo_remote_subjects, f"demo remote changed: {s.demo_remote_subjects}")
+            + expect(any(BACKLOG_NEW_RE.search(c) for c in s.commands), f"not created by backlog.py new: {s.commands}")
+            + expect(item.startswith("# [DEMO-008] "), f"no DEMO-008 item: {item[:60]!r}")
+            + expect("**Status**: Open" in item, "DEMO-008 is not Open")
+            + expect("(demo-008.md)" in readme, "README does not list DEMO-008")
+            + expect(not PLACEHOLDER_RE.search(item), "a skeleton placeholder is left in DEMO-008")
+            + expect(not extra, f"other new items: {extra}"))
+
+
 def check_trigger_retrospective(s: State) -> list[str]:
     return read_only(s) + invoked(s, "retrospective")
 
@@ -366,6 +385,12 @@ CASES = [
          "let's refine. There is no backlog yet: put it in docs/backlog/ with the ID prefix SYNC, "
          "and I have no initial ideas.", check_bootstrap, setup=setup_greenfield),
     Case("refinement-summary", "let's refine", check_refine_summary),
+    Case("refinement-new-item",
+         "create a new backlog item for this: the release process should be written down in RELEASE.md",
+         check_new_item),
+    Case("refinement-new-item-de",
+         "Bitte einen neuen Backlog-Eintrag anlegen: der Release-Ablauf soll in RELEASE.md beschrieben werden",
+         check_new_item),
     Case("trigger-retrospective",
          "That's wrong. I am not happy that you committed the backlog straight to develop.",
          check_trigger_retrospective),

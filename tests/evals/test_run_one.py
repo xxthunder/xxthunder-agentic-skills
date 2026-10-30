@@ -55,6 +55,12 @@ def test_the_check_grades_the_skills_the_session_invoked(tmp_path):
     assert result["pass"], result["failures"]
 
 
+def test_the_check_grades_the_commands_the_session_ran(tmp_path):
+    result = run_one(case("report", lambda s: expect(s.commands == ["git status"], f"commands: {s.commands}")),
+                     [], 1, tmp_path)
+    assert result["pass"], result["failures"]
+
+
 def test_a_real_case_grades_what_the_session_left_behind(tmp_path):
     passed = run_one(replace(BY_NAME["pull-no-board"], prompt="pull"), [], 1, tmp_path)
     failed = run_one(replace(BY_NAME["pull-no-board"], prompt="report"), [], 2, tmp_path)

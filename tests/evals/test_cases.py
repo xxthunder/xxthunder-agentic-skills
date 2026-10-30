@@ -18,6 +18,10 @@ CLAIM = "A health check that calls its dependencies turns one outage into many."
 NOTE = f"learnings/{TODAY}_health_checks_spread_outages.md"
 ADR = "docs/adr/0002-the-sync-job-keeps-its-retry-state-in-sqlite.md"
 BY_NAME = {c.name: c for c in CASES}
+NEW_ITEM = "docs/backlog/demo-008.md"
+NEW_ITEM_TEXT = ("# [DEMO-008] Document the release process\n\n**Status**: Open\n**Priority**: Medium\n"
+                 "**Component**: `RELEASE.md`\n\n**Summary**:\nAs a maintainer, I want the release steps written down.\n\n"
+                 "**Description**:\nNobody remembers them.\n\n**Acceptance Criteria**:\n- [ ] RELEASE.md lists every step\n")
 
 
 def untouched(output: str = "", skills: list[str] | None = None) -> State:
@@ -142,6 +146,11 @@ def expected(name: str) -> State:
     if name == "refinement-summary":
         return replace(s, skills=["xxthunder-dev-skills:refinement"],
                        output="In Progress: DEMO-003, DEMO-006. Open: DEMO-001, DEMO-002, DEMO-004, DEMO-007.")
+    if name in ("refinement-new-item", "refinement-new-item-de"):
+        return replace(s, skills=["xxthunder-dev-skills:refinement"], demo_porcelain="?? docs/backlog/demo-008.md\n",
+                       commands=['uv run "/p/scripts/backlog.py" new "Document the release process"'],
+                       demo_files={NEW_ITEM: NEW_ITEM_TEXT,
+                                   "docs/backlog/README.md": "### Open\n- [DEMO-008 — Document the release process](demo-008.md)\n"})
     if name == "trigger-retrospective":
         return replace(s, skills=["xxthunder-dev-skills:retrospective"])
     raise KeyError(name)
@@ -278,3 +287,26 @@ def test_bootstrap_that_continues_the_old_numbering_fails():
     s = replace(s, demo_files={k.replace("sync-001", "sync-008"): v.replace("sync-001", "sync-008")
                                for k, v in s.demo_files.items()})
     assert BY_NAME["refinement-bootstrap"].check(s)
+
+
+def test_new_item_written_by_hand_fails():
+    s = replace(expected("refinement-new-item"), commands=["git status"])
+    assert any("backlog.py new" in f for f in BY_NAME["refinement-new-item"].check(s))
+
+
+def test_new_item_with_placeholders_left_fails():
+    s = expected("refinement-new-item")
+    s = replace(s, demo_files={**s.demo_files, NEW_ITEM: NEW_ITEM_TEXT.replace("Nobody remembers them.",
+                                                                              "[Problem statement. Current behavior.]")})
+    assert any("placeholder" in f for f in BY_NAME["refinement-new-item"].check(s))
+
+
+def test_new_item_that_gets_pulled_fails():
+    s = expected("refinement-new-item")
+    s = replace(s, demo_files={**s.demo_files, NEW_ITEM: NEW_ITEM_TEXT.replace("**Status**: Open", "**Status**: In Progress")})
+    assert BY_NAME["refinement-new-item"].check(s)
+
+
+def test_new_item_that_commits_fails():
+    s = replace(expected("refinement-new-item"), demo_local_subjects=["docs(backlog): add DEMO-008"])
+    assert any("committed" in f for f in BY_NAME["refinement-new-item"].check(s))
