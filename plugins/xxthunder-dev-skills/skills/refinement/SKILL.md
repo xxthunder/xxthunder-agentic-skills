@@ -1,6 +1,6 @@
 ---
 name: refinement
-description: "Start a backlog refinement session to discuss the project mission, review backlog items, prioritize work, and align on next steps. Also bootstraps the backlog structure in greenfield projects. Trigger with: 'another refinement session', 'let's refine', 'refinement time', 'backlog refinement', or similar requests to discuss project direction and priorities."
+description: "Start a backlog refinement session to discuss the project mission, review backlog items, prioritize work, and align on next steps. Also bootstraps the backlog structure in greenfield projects, and creates a single new backlog item on request. Trigger with: 'another refinement session', 'let's refine', 'refinement time', 'backlog refinement', or similar requests to discuss project direction and priorities. Also trigger on any request to create, add, open or write up a new backlog item, issue, story, ticket or substory — in any language ('create a new item for X', 'add a story for X', 'Neues Issue für X', 'bitte einen neuen Eintrag anlegen') — instead of writing the item file by hand."
 user_invocable: true
 allowed-tools: Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *)
 ---
@@ -16,6 +16,8 @@ Interactive backlog refinement session. Reviews project mission, current state, 
 - "Another refinement session" / "Let's refine" / "Refinement time"
 - "Backlog refinement" / "Let's discuss the backlog"
 - Any request to review project status and priorities
+
+- **A request for one new item** — "create a new item for X", "add a story for X", "first create an issue here for it", "Neues Issue für X", in any language → skip the session and go straight to [New Ideas](#new-ideas): no context walk, no summary, no topic menu. Create the item, fill it in, and end with the item's path. When the request also says to pull or start it, hand that to `backlog-ops` afterwards.
 
 Note: a bare "what should we work on next?" is **not** sufficient by itself — it often appears in casual prompts where the user just wants a one-line suggestion, not a structured session. Trigger only when the surrounding context indicates the user wants the full refinement flow (mission review, backlog walk, prioritization).
 
@@ -102,16 +104,17 @@ Use AskUserQuestion to let the user choose their focus area:
 #### New Ideas
 - Help the user articulate the idea
 - Read **[references/backlog-format.md](references/backlog-format.md)** for the entry template and ID convention
-- Read the project prefix from the **Notes** section of the backlog
 - Decide whether this is a **top-level item** or a **substory under an existing item**:
-  - If the idea naturally belongs under an existing top-level item as one of several related pieces of work, it's a substory — allocate the next letter suffix (`a`, `b`, `c`, …) under that parent.
-  - Otherwise it's top-level — allocate the next free three-digit number.
-- Get the next available ID from the backlog script (see "The backlog script" in the format reference):
-  - **Top-level**: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" next-id`
-  - **Substory of `PREFIX-NNN`**: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" next-id PREFIX-NNN`
-- Draft a backlog entry with all required fields using `[PREFIX-###]` or `[PREFIX-###<letter>]` format (no `**Epic**:` back-reference — the letter suffix encodes the parent)
+  - If the idea naturally belongs under an existing top-level item as one of several related pieces of work, it's a substory of that parent.
+  - Otherwise it's top-level.
+- Create the item with the backlog script — it allocates the ID, writes the skeleton with `**Status**: Open` and lists it in the README's table of contents, and prints the new file's path (see "The backlog script" in the format reference):
+  - **Top-level**: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" new "<title>" [--priority High|Medium|Low|—]`
+  - **Substory of `PREFIX-NNN`**: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" new "<title>" --parent PREFIX-NNN`
+
+  The title is one line. A non-zero exit from the script ends the step: show its message and stop. The item file, its ID and its TOC line come from the script, every time.
+- Fill in the free text of the file the script printed: replace the bracketed placeholders of `**Component**`, `**Summary**`, `**Description**` and `**Acceptance Criteria**` with the content, and add optional fields from the format reference where they help. Leave the heading, `**Status**` and the README alone — they belong to the script. No `**Epic**:` back-reference — the letter suffix encodes the parent.
 - If this is the **first substory** under a top-level item, that item is now implicitly an epic. No rename needed; optionally add a **Substories** list to the parent for readability. The parent's status cascade (see format reference) now governs when it can be marked Done.
-- After user approval, write the item file, then run `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" toc` — it lists the new item in the README. A non-zero exit from the script ends the step: show its message and stop.
+- Show the user the item for review. It stays uncommitted, like every refinement change.
 
 #### Architecture
 - Read relevant source files and architecture docs
