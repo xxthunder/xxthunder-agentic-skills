@@ -41,7 +41,6 @@
 
 ### In Progress
 - [XAS-053 — The board shows Jira issues next to backlog items](xas-053.md)
-- [XAS-051 — A new backlog item comes from `backlog.py new`, and `refinement` triggers on a request for one](xas-051.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
 - [XAS-027 — Agentic Engineering-as-Code — durable design record](xas-027.md)
 - [XAS-026 — CI / GitHub Actions setup](xas-026.md)
@@ -49,6 +48,7 @@
 - [XAS-001 — Backlog refinement](xas-001.md)
 
 ### Done
+- [XAS-051 — A new backlog item comes from `backlog.py new`, and `refinement` triggers on a request for one](xas-051.md)
 - [XAS-047 — Behavioural evals for the dev skills](xas-047.md)
 - [XAS-046 — Kanban as code: `next` shows a board, `backlog-ops` moves its cards](xas-046.md)
 - [XAS-045 — Store contracts may live in a file the store's `AGENTS.md` imports](xas-045.md)
