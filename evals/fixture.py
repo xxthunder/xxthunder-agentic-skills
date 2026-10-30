@@ -166,9 +166,10 @@ class State:
     demo_head_message: str = ""                                  # full message, when there are local commits
     demo_files: dict[str, str] = field(default_factory=dict)     # working tree of the demo checkout
     store_files: dict[str, str] = field(default_factory=dict)    # the store's default branch on its remote
+    commands: list[str] = field(default_factory=list)            # Bash commands the session ran, in order
 
 
-def snapshot(sandbox: Path, output: str, skills: list[str]) -> State:
+def snapshot(sandbox: Path, output: str, skills: list[str], commands: list[str] | None = None) -> State:
     store_bare = sandbox / "remotes" / "store.git"
     commits = []
     for chunk in git(store_bare, "log", "--format=%x00%s", "--name-only", BRANCH).split("\x00")[1:]:
@@ -187,4 +188,5 @@ def snapshot(sandbox: Path, output: str, skills: list[str]) -> State:
                  demo_local_subjects=local,
                  demo_head_message=git(demo, "log", "-1", "--format=%B") if local else "",
                  demo_files=text_files(demo),
-                 store_files=committed_files(store_bare))
+                 store_files=committed_files(store_bare),
+                 commands=list(commands or []))

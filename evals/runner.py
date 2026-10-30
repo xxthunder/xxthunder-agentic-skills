@@ -98,13 +98,14 @@ def claude_command(prompt: str, plugin_dirs: list[Path], sandbox: Path) -> list[
     return cmd + ["--allowedTools", *TOOLS]
 
 
-def parse_stream(stream: str) -> tuple[str, list[str]]:
-    """The assistant's final answer and the skills it invoked, from a stream-json transcript.
+def parse_stream(stream: str) -> tuple[str, list[str], list[str]]:
+    """The assistant's final answer, the skills it invoked and the Bash commands it ran,
+    from a stream-json transcript.
 
     The output is the `result` event's text, so narration between tool calls is
     not graded. A run cut off before that event falls back to all of its text.
     """
-    output, skills, final = "", [], None
+    output, skills, commands, final = "", [], [], None
     for line in stream.splitlines():
         try:
             event = json.loads(line)
@@ -119,7 +120,9 @@ def parse_stream(stream: str) -> tuple[str, list[str]]:
                 output += block["text"] + "\n"
             elif block.get("type") == "tool_use" and block.get("name") == "Skill":
                 skills.append(block["input"].get("skill", ""))
-    return (output if final is None else final), skills
+            elif block.get("type") == "tool_use" and block.get("name") == "Bash":
+                commands.append(block["input"].get("command", ""))
+    return (output if final is None else final), skills, commands
 
 
 def run_one(case: Case, plugin_dirs: list[Path], n: int, out: Path) -> dict:
@@ -139,10 +142,10 @@ def run_one(case: Case, plugin_dirs: list[Path], n: int, out: Path) -> dict:
         stream = stream.decode() if isinstance(stream, bytes) else stream
     (sandbox / "stream.jsonl").write_text(stream, encoding="utf-8")
     (sandbox / "stderr.txt").write_text(err or "", encoding="utf-8")
-    output, skills = parse_stream(stream)
+    output, skills, commands = parse_stream(stream)
     (sandbox / "output.md").write_text(output, encoding="utf-8")
     try:
-        failures = case.check(snapshot(sandbox, output, skills))
+        failures = case.check(snapshot(sandbox, output, skills, commands))
     except Exception as e:  # a broken end state is a failure, not a crash
         failures = [f"grading error: {e!r}"]
     result = {"case": case.name, "run": n, "pass": not failures, "failures": failures}
