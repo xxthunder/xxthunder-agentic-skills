@@ -19,6 +19,7 @@ Why this repository looks the way it does. One decision per file, at
 | [0010](0010-other-repositories-are-read-at-origin-head-never-pulled.md) | Other repositories are read at `origin/HEAD`, never pulled | Accepted | 2026-10-21 |
 | [0011](0011-backlog-ops-moves-the-card-on-a-configured-board.md) | `backlog-ops` moves the card on a configured board | Accepted | 2026-10-27 |
 | [0012](0012-skill-changes-are-verified-by-local-behavioural-evals.md) | Skill changes are verified by local behavioural evals | Accepted | 2026-10-27 |
+| [0013](0013-skill-work-builds-on-superpowers-and-skill-creator.md) | Skill work builds on superpowers and skill-creator | Accepted | 2026-10-31 |
 
 ---
 
