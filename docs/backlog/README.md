@@ -9,6 +9,9 @@
 ## Table of Contents
 
 ### Open
+- [XAS-056 — `evals/` is checked against skill-creator's eval tooling: keep, align or replace](xas-056.md)
+- [XAS-055 — A skill change is reviewed against a skill rubric inside the superpowers loop, and the eval gate ends the loop](xas-055.md)
+- [XAS-054 — Skill work adopts superpowers and skill-creator before it builds its own](xas-054.md)
 - [XAS-052 — Agents read the backlog through `backlog.py`, not its files](xas-052.md)
 - [XAS-050 — Eval sessions get only the permissions the sandbox needs](xas-050.md)
 - [XAS-049 — An eval session before skill changes are pushed](xas-049.md)
