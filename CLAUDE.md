@@ -71,6 +71,19 @@ reliably invokes a TDD skill at the moment someone starts writing
 implementation code. A convention has to be present before that moment, which
 is what this file is for. See [XAS-030](docs/backlog/xas-030.md).
 
+### Skill changes follow `writing-skills`
+
+A change to a `SKILL.md` follows `superpowers:writing-skills`. First an eval case
+fails against `develop`, then the skill change makes it pass, then loopholes get
+closed. Before building anything for skill work (a loop, a reviewer, a harness,
+a script), look at what `superpowers` and `skill-creator` already ship, and
+build only for the gap. What can be checked mechanically is checked by a script,
+a hook or an eval assertion; a skill calls a script for every step a script can
+do. See [ADR-0013](docs/adr/0013-skill-work-builds-on-superpowers-and-skill-creator.md).
+
+This rule stands here, in always-on context, for the same reason as the TDD
+rule above: it has to be present before anyone starts to write.
+
 ### Conventional commits
 
 This repo uses conventional commit format. Scope should match the skill name when the change is skill-specific (e.g., `refactor(refinement): ...`, `feat(design-record): ...`). Use `chore` for version bumps and repo maintenance, and `docs(backlog)` for backlog changes.

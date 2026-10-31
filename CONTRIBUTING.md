@@ -61,7 +61,11 @@ is at a git ref, and checks the files, commits and statuses the run leaves behin
 
 A change to a skill's behaviour needs a case. Write the case first, and check
 that it fails against `develop` before it passes on your branch: a case that
-passes on both tests nothing. Every skill already has cases for what it does
+passes on both tests nothing. This is the RED and GREEN of
+`superpowers:writing-skills`, which every skill change follows. What this
+repository takes from `superpowers` and `skill-creator`, and why it keeps its
+own harness, is recorded in
+[ADR-0013](docs/adr/0013-skill-work-builds-on-superpowers-and-skill-creator.md). Every skill already has cases for what it does
 today. Those pass on `develop` by design, and they catch a regression.
 
 The plugin is exported from the ref with `git archive`, which sees commits
