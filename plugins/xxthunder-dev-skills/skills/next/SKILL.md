@@ -1,7 +1,6 @@
 ---
 name: next
 description: "Show the author's Kanban board — what is in progress and what comes next across all of the author's repositories — from one board file in the author's personal store, with each card's status and priority read fresh from its own backlog. Also places a card on the board or drops one. Use on '/next', 'what's next', 'was steht an' — when asked about the work backlog across repos, not about plans in general; and on 'put HSH-089 next', 'put X after Y', 'drop X from the board'. Never writes into the current repository; the store is configured on the machine and never named in any repo."
-user_invocable: true
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/store *), Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *)
 ---
 

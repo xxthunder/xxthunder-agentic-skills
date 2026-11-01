@@ -1,7 +1,6 @@
 ---
 name: refinement
 description: "Start a backlog refinement session to discuss the project mission, review backlog items, prioritize work, and align on next steps. Also bootstraps the backlog structure in greenfield projects, and creates a single new backlog item on request. Trigger with: 'another refinement session', 'let's refine', 'refinement time', 'backlog refinement', or similar requests to discuss project direction and priorities. Also trigger on any request to create, add, open or write up a new backlog item, issue, story, ticket or substory — in any language ('create a new item for X', 'add a story for X', 'Neues Issue für X', 'bitte einen neuen Eintrag anlegen') — instead of writing the item file by hand."
-user_invocable: true
 allowed-tools: Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *)
 ---
 
