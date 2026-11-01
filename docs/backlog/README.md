@@ -41,7 +41,6 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
-- [XAS-057 — Every `SKILL.md` frontmatter is checked by a test](xas-057.md)
 - [XAS-053 — The board shows Jira issues next to backlog items](xas-053.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
 - [XAS-027 — Agentic Engineering-as-Code — durable design record](xas-027.md)
@@ -50,6 +49,7 @@
 - [XAS-001 — Backlog refinement](xas-001.md)
 
 ### Done
+- [XAS-057 — Every `SKILL.md` frontmatter is checked by a test](xas-057.md)
 - [XAS-056 — `evals/` is checked against skill-creator's eval tooling: keep, align or replace](xas-056.md)
 - [XAS-054 — Skill work adopts superpowers and skill-creator before it builds its own](xas-054.md)
 - [XAS-051 — A new backlog item comes from `backlog.py new`, and `refinement` triggers on a request for one](xas-051.md)
