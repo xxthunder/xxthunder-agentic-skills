@@ -10,7 +10,6 @@
 
 ### Open
 - [XAS-060 — A board move goes through a script, not through the agent's hand edit](xas-060.md)
-- [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
 - [XAS-052 — Agents read the backlog through `backlog.py`, not its files](xas-052.md)
 - [XAS-050 — Eval sessions get only the permissions the sandbox needs](xas-050.md)
 - [XAS-048 — Lint and format a file after the agent saves it](xas-048.md)
@@ -39,6 +38,7 @@
 
 ### In Progress
 - [XAS-059 — The skill repo's rubric guides the loop's reviewer](xas-059.md)
+- [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
 - [XAS-055 — An item runs from the board through the superpowers loop to its repo's gate and an evidence package](xas-055.md)
 - [XAS-053 — The board shows Jira issues next to backlog items](xas-053.md)
 - [XAS-049 — An eval session before skill changes are pushed](xas-049.md)
