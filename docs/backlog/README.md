@@ -12,7 +12,6 @@
 - [XAS-060 — A board move goes through a script, not through the agent's hand edit](xas-060.md)
 - [XAS-059 — The skill repo's rubric guides the loop's reviewer](xas-059.md)
 - [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
-- [XAS-057 — Every `SKILL.md` frontmatter is checked by a test](xas-057.md)
 - [XAS-055 — An item runs from the board through the superpowers loop to its repo's gate and an evidence package](xas-055.md)
 - [XAS-052 — Agents read the backlog through `backlog.py`, not its files](xas-052.md)
 - [XAS-050 — Eval sessions get only the permissions the sandbox needs](xas-050.md)
@@ -42,6 +41,7 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
+- [XAS-057 — Every `SKILL.md` frontmatter is checked by a test](xas-057.md)
 - [XAS-053 — The board shows Jira issues next to backlog items](xas-053.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
 - [XAS-027 — Agentic Engineering-as-Code — durable design record](xas-027.md)
