@@ -1,7 +1,6 @@
 ---
 name: design-record
 description: "Record a design decision as an ADR, or update the living architecture document, in a repo that keeps a record of how it is built and why. Drafts the ADR body from the conversation, allocates the next number, maintains the ADR index, and edits named sections of architecture.md. Stages file edits only; never produces its own commit. Trigger with: 'record an ADR', 'document this decision', 'we decided X — write it up', 'why did we choose Y — capture it', 'update the architecture doc'."
-user_invocable: true
 ---
 
 <!-- Source: https://github.com/xxthunder/xxthunder-agentic-skills/tree/develop/plugins/xxthunder-dev-skills/skills/design-record -->

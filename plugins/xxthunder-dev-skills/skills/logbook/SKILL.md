@@ -1,7 +1,6 @@
 ---
 name: logbook
 description: "Chronicle what a session starts, notes and finishes into the author's personal logbook repo — one line per event, across all repositories. Use on the qualified phrases only: 'log the start', 'log that I started X', 'log that …', 'note that … in the log', 'log the close', 'log that X is done'. `backlog-ops` suggests logging after a pull and after a close; the author accepts or not. Never writes into the current repository; the logbook is configured on the machine and never named in any repo."
-user_invocable: true
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/store *)
 ---
 

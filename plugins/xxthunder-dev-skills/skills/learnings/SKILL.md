@@ -1,7 +1,6 @@
 ---
 name: learnings
 description: "Capture a learning that outlives the current repository into the author's personal knowledge repo, or recall what earlier sessions learned about a topic. Use `capture` when the author corrects the agent, when a result plainly holds beyond this project, when `logbook done` asks whether anything outlives the repo, or on 'capture', 'capture that', 'that's a learning', 'keep that for later'. Use `recall` at the start of a topic or on 'what do I know about X', 'have I run into this before', 'recall X'. Never writes into the current repository; the knowledge repo is configured on the machine and never named in any repo."
-user_invocable: true
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/store *)
 ---
 

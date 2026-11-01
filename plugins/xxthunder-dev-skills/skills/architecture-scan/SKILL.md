@@ -1,7 +1,6 @@
 ---
 name: architecture-scan
 description: "Derive a repository's real structure from its code and compare it against the architecture document. Produces a bootstrap proposal when no document exists, and a drift report when one does. Read-only — it proposes, and design-record applies. Trigger with: 'check the docs against reality', 'is the architecture doc still true', 'bootstrap the architecture doc', 'has the architecture drifted'."
-user_invocable: true
 ---
 
 <!-- Source: https://github.com/xxthunder/xxthunder-agentic-skills/tree/develop/plugins/xxthunder-dev-skills/skills/architecture-scan -->

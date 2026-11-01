@@ -10,6 +10,7 @@ dev = [
     "pytest-cov>=5",
     "pypdf>=4",
     "reportlab>=4",
+    "pyyaml>=6",
 ]
 
 [tool.uv]

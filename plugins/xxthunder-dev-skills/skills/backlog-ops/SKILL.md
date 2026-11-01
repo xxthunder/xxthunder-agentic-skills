@@ -1,7 +1,6 @@
 ---
 name: backlog-ops
 description: "Apply lifecycle operations to a backlog item — pull (Open → In Progress), tick an acceptance or UAT criterion, or close an item (→ Done) with automatic epic-status cascade. Stages file edits and never produces its own commit in the repository; a pull is handed to commit-helper for the default branch, and a configured Kanban board gets the item's card moved on pull and close. Trigger with: 'start XAS-025', 'pull XAS-025', 'mark AC 2 done on XAS-025', 'tick UAT 1 on XAS-025', 'close XAS-025', 'complete XAS-025'."
-user_invocable: true
 allowed-tools: Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/store *)
 ---
 

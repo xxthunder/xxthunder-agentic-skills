@@ -1,18 +1,19 @@
 ---
 name: naps2-scan
 description: >
-  Entry point for scanning paperwork with NAPS2. Drives a document scan end-to-end: invoke
-  NAPS2.Console.exe to scan with OCR, chain into simplex-merge when scanning a double-sided
-  document on a simplex scanner, and propose a content-derived filename. Use for ANY request
-  to scan paperwork or digitize a document, including conversational variants like
-  "scan this", "let's scan", "scan another", "scan again", "scan the next one", "new scan",
-  "start scanning", "digitize this receipt/letter/invoice/bill/statement", or "run NAPS2".
+  Scans paperwork with NAPS2 end-to-end: run NAPS2.Console.exe with OCR, chain into
+  simplex-merge when scanning a double-sided document on a simplex scanner, and propose a
+  content-derived filename. Use for ANY request to scan paperwork or digitize a document,
+  including variants like "scan this", "let's scan", "scan another", "scan again",
+  "scan the next one", "new scan", "start scanning",
+  "digitize this receipt/letter/invoice/bill/statement", or "run NAPS2".
   Also handles batch mode — scanning a whole stack of separate documents in one pass
   ("scan this stack", "batch scan", "these are multiple documents") — by chaining into
-  `split-batch` after the scan to separate the bundle into one PDF per document.
+  `split-batch`, which splits the bundle into one PDF per document.
   Also triggers when the user already has fresh scan output and wants to continue the
-  pipeline (OCR, merge, name, rename). This is the starting-point skill for scanning;
-  `simplex-merge` is post-processing only and should not be picked for new-scan requests.
+  pipeline (OCR, merge, name, rename) — not for renaming or filing PDFs that did not just
+  come from a scan. This is the starting-point skill for scanning; `simplex-merge` is
+  post-processing only, never for a new scan.
 ---
 
 <!-- Source: https://github.com/xxthunder/xxthunder-agentic-skills/tree/develop/plugins/xxthunder-paperless-skills/skills/naps2-scan -->
