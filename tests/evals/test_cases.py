@@ -2,14 +2,15 @@
 on the end state its scenario asks for — built here by hand, without an agent."""
 from __future__ import annotations
 
+import subprocess
 from dataclasses import replace
 from datetime import date
 
 import pytest
 
 from evals.board import BOARD_FILE, card
-from evals.cases import CASES
-from evals.fixture import INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, State, display_id
+from evals.cases import CASES, RUBRIC, flagged
+from evals.fixture import INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, State, build, display_id
 
 LOG_FILE = "engineering/log.md"
 TODAY = date.today().isoformat()
@@ -79,6 +80,10 @@ def expected(name: str) -> State:
                        demo_status=status(s, DEMO_003="Done (2026-10-27)"),
                        demo_porcelain="M  docs/backlog/demo-003.md\n",
                        board_progress=[INITIAL_PROGRESS[0], INITIAL_PROGRESS[2]])
+    if name == "rubric-flags-hand-allocation":
+        return replace(s, output="Script before prose: the ID is allocated by hand.\nFLAGGED: Script before prose")
+    if name == "rubric-passes-scripted-allocation":
+        return replace(s, output="No criterion has a finding.\nFLAGGED: none")
     if name == "pull-no-board":
         return replace(s, demo_status=status(s, DEMO_007="In Progress"), output="Pulled DEMO-007.")
     if name == "pull-board-unwritable":
@@ -310,3 +315,56 @@ def test_new_item_that_gets_pulled_fails():
 def test_new_item_that_commits_fails():
     s = replace(expected("refinement-new-item"), demo_local_subjects=["docs(backlog): add DEMO-008"])
     assert any("committed" in f for f in BY_NAME["refinement-new-item"].check(s))
+
+
+def test_rubric_clean_diff_flagged_under_script_before_prose_fails():
+    s = replace(expected("rubric-passes-scripted-allocation"), output="FLAGGED: Script before prose, Evidence")
+    assert any("script before prose" in f for f in BY_NAME["rubric-passes-scripted-allocation"].check(s))
+
+
+def test_rubric_clean_diff_with_other_findings_passes():
+    s = replace(expected("rubric-passes-scripted-allocation"), output="**FLAGGED:** `Tests first`")
+    assert BY_NAME["rubric-passes-scripted-allocation"].check(s) == []
+
+
+def test_rubric_takes_the_last_flagged_line():
+    out = "The author wrote `FLAGGED: none` in the template.\n\n**FLAGGED:** Script before prose\n"
+    s = replace(expected("rubric-flags-hand-allocation"), output=out)
+    assert BY_NAME["rubric-flags-hand-allocation"].check(s) == []
+
+
+def test_flagged_none_with_a_trailing_period_is_empty():
+    assert flagged("FLAGGED: none.") == []
+
+
+def test_flagged_heading_line_parses_like_the_plain_line():
+    assert flagged("### FLAGGED: Script before prose") == flagged("FLAGGED: Script before prose") == ["script before prose"]
+
+
+def test_flagged_strips_a_trailing_period_from_each_name():
+    assert flagged("FLAGGED: Script before prose, Evidence.") == ["script before prose", "evidence"]
+
+
+def test_rubric_without_flagged_line_fails():
+    for name in ("rubric-flags-hand-allocation", "rubric-passes-scripted-allocation"):
+        s = replace(expected(name), output="Looks fine.")
+        assert any("no FLAGGED line" in f for f in BY_NAME[name].check(s))
+
+
+def changed_files(case: str, tmp_path) -> list[str]:
+    build(tmp_path)
+    demo = tmp_path / "checkouts" / "demo"
+    BY_NAME[case].setup(demo)
+    out = subprocess.run(["git", "diff", "develop...HEAD", "--name-only"], cwd=demo, check=True,
+                         capture_output=True, text=True).stdout
+    assert (demo / "docs" / "rubric.md").read_text(encoding="utf-8") == RUBRIC.read_text(encoding="utf-8")
+    return out.split()
+
+
+def test_hand_allocation_setup_changes_only_the_skill(tmp_path):
+    assert changed_files("rubric-flags-hand-allocation", tmp_path) == ["skills/new-item/SKILL.md"]
+
+
+def test_scripted_allocation_setup_adds_the_script_and_its_test(tmp_path):
+    assert sorted(changed_files("rubric-passes-scripted-allocation", tmp_path)) == [
+        "scripts/next_id.py", "skills/new-item/SKILL.md", "tests/test_next_id.py"]

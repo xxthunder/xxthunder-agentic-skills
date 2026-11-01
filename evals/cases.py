@@ -14,12 +14,17 @@ from pathlib import Path
 from typing import Callable
 
 from evals.board import BOARD_FILE, card, ids
-from evals.fixture import INITIAL_NEXT, ITEMS, State
+from evals.fixture import IDENTITY, INITIAL_NEXT, ITEMS, State
 
 LOG_FILE = "engineering/log.md"
 HUB_FILE = "learnings/README.md"
 CONVENTIONAL_RE = re.compile(r"^(feat|fix|docs|style|refactor|perf|test|chore|ci)(\([^)]+\))?: [a-z]\S.*[^.]$")
 ITEM_FILE = "docs/backlog/demo-007.md"
+RUBRIC = Path(__file__).resolve().parents[1] / "docs" / "rubric.md"
+RUBRIC_PROMPT = (
+    "Review the change on this branch against develop (`git diff develop...HEAD`) with the rubric in "
+    "docs/rubric.md. Answer each criterion with evidence. End your answer with one line `FLAGGED: ` "
+    "followed by the names of the criteria that have a finding, separated by commas, or `none`.")
 
 
 def expect(cond: bool, msg: str) -> list[str]:
@@ -331,6 +336,104 @@ def check_trigger_retrospective(s: State) -> list[str]:
     return read_only(s) + invoked(s, "retrospective")
 
 
+def flagged(output: str) -> list[str] | None:
+    """The criteria named on the last `FLAGGED:` line; None when there is no such line."""
+    found = None
+    for line in output.splitlines():
+        m = re.match(r"FLAGGED:(.*)", line.strip("#*` \t"), re.I)
+        if m:
+            found = [n.strip().rstrip(".").strip().lower() for n in m.group(1).strip("*` \t").split(",")]
+    return None if found is None else [n for n in found if n and n != "none"]
+
+
+def check_rubric_flags_hand_allocation(s: State) -> list[str]:
+    names = flagged(s.output)
+    if names is None:
+        return ["no FLAGGED line"]
+    return expect(any("script before prose" in n for n in names), f"not flagged under script before prose: {names}")
+
+
+def check_rubric_passes_scripted_allocation(s: State) -> list[str]:
+    names = flagged(s.output)
+    if names is None:
+        return ["no FLAGGED line"]
+    return expect(not any("script before prose" in n for n in names),
+                  f"clean diff flagged under script before prose: {names}")
+
+
+SKILL_BASE = """---
+name: new-item
+description: Create a new backlog item. Use on "new item", "add a story", "neues Item".
+---
+
+# New item
+
+1. Ask the author for the title and the summary.
+2. Write the item from the template.
+"""
+SKILL_STEPS = "2. Write the item from the template.\n"
+SKILL_BY_HAND = ("2. Allocate the ID: list docs/backlog/, take the highest DEMO number and add one.\n"
+                 "3. Write the item from the template.\n")
+SKILL_BY_SCRIPT = ("2. Allocate the ID: run `python scripts/next_id.py` and use the ID it prints.\n"
+                   "3. Write the item from the template.\n")
+NEXT_ID = '''"""Print the next backlog ID: DEMO- plus the highest number in docs/backlog/demo-NNN.md plus one."""
+import re
+import sys
+from pathlib import Path
+
+
+def main(backlog: Path) -> str:
+    numbers = [int(m.group(1)) for p in backlog.glob("demo-*.md") if (m := re.fullmatch(r"demo-(\\d{3})\\.md", p.name))]
+    return f"DEMO-{max(numbers, default=0) + 1:03d}"
+
+
+if __name__ == "__main__":
+    print(main(Path(sys.argv[1] if len(sys.argv) > 1 else "docs/backlog")))
+'''
+TEST_NEXT_ID = '''import importlib.util
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("next_id", Path(__file__).parents[1] / "scripts" / "next_id.py")
+next_id = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(next_id)
+
+
+def test_next_id_is_one_above_the_highest(tmp_path):
+    (tmp_path / "demo-001.md").write_text("", encoding="utf-8")
+    (tmp_path / "demo-007.md").write_text("", encoding="utf-8")
+    assert next_id.main(tmp_path) == "DEMO-008"
+'''
+
+
+def setup_rubric(demo: Path, step_text: str, extra: dict[str, str]) -> None:
+    def git(*args: str) -> None:
+        subprocess.run(["git", *IDENTITY, *args], cwd=demo, check=True)
+
+    def put(rel: str, text: str) -> None:
+        (demo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (demo / rel).write_text(text, encoding="utf-8", newline="\n")
+
+    put("docs/rubric.md", RUBRIC.read_text(encoding="utf-8"))
+    put("skills/new-item/SKILL.md", SKILL_BASE)
+    git("add", "docs/rubric.md", "skills/new-item/SKILL.md")
+    git("commit", "-q", "-m", "docs: base skill and rubric")
+    git("push", "-q", "origin", "develop")
+    git("checkout", "-q", "-b", "feature/DEMO-008-allocate-id")
+    put("skills/new-item/SKILL.md", SKILL_BASE.replace(SKILL_STEPS, step_text))
+    for rel, text in extra.items():
+        put(rel, text)
+    git("add", "-A")
+    git("commit", "-q", "-m", "feat(new-item): allocate the ID before writing (DEMO-008)")
+
+
+def setup_rubric_hand_allocation(demo: Path) -> None:
+    setup_rubric(demo, SKILL_BY_HAND, {})
+
+
+def setup_rubric_scripted_allocation(demo: Path) -> None:
+    setup_rubric(demo, SKILL_BY_SCRIPT, {"scripts/next_id.py": NEXT_ID, "tests/test_next_id.py": TEST_NEXT_ID})
+
+
 @dataclass(frozen=True)
 class Case:
     name: str
@@ -394,4 +497,8 @@ CASES = [
     Case("trigger-retrospective",
          "That's wrong. I am not happy that you committed the backlog straight to develop.",
          check_trigger_retrospective),
+    Case("rubric-flags-hand-allocation", RUBRIC_PROMPT, check_rubric_flags_hand_allocation,
+         board=False, setup=setup_rubric_hand_allocation),
+    Case("rubric-passes-scripted-allocation", RUBRIC_PROMPT, check_rubric_passes_scripted_allocation,
+         board=False, setup=setup_rubric_scripted_allocation),
 ]
