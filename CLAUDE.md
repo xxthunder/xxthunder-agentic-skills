@@ -17,6 +17,15 @@ Current plugins:
 
 Plugins version independently; a change in one plugin only bumps that plugin's version (plus its entry in `marketplace.json`).
 
+## Closed loop
+
+An item runs through the closed loop on this repository's gate and rubric:
+
+- **Gate**: `scripts/gate`, run on the host from the repository root. It comes with
+  [XAS-049](docs/backlog/xas-049.md); until it is there, the loop does not run here.
+- **Rubric**: [docs/rubric.md](docs/rubric.md), for what only a change to this repository
+  needs.
+
 ## Key Rules
 
 ### Skills are portable
