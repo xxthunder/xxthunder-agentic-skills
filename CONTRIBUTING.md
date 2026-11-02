@@ -85,8 +85,12 @@ more in parallel. The runner loads no user settings and no MCP servers, and it
 clears every store variable pair (`*_PATH`/`*_REMOTE`) from the environment.
 Plugins that the plugin depends on are taken from your plugin cache, so install
 them first. Results, with each run's transcript, go to
-`<tmp>/xxthunder-evals/<ref>/`, outside the checkout. Record the pass rates in
-the pull request.
+`<tmp>/xxthunder-evals/<plugin version>/`, outside the checkout, keyed by the tree
+hash of `plugins/xxthunder-dev-skills` at the ref. A result counts only for that
+version of the plugin and that version of the case: each `result.json` carries the
+case's fingerprint (its prompt, flags, check and setup, plus the shared code under
+`evals/` that git tracks). A rebase changes neither, so its results keep counting.
+Record the pass rates in the pull request.
 
 ## What this repository does not accept
 
