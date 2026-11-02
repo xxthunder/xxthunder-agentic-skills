@@ -13,8 +13,8 @@ from datetime import date
 from pathlib import Path
 from typing import Callable
 
-from evals.board import BOARD_FILE, card, ids
-from evals.fixture import IDENTITY, INITIAL_NEXT, ITEMS, State
+from evals.board import BOARD_FILE, card, ids, jira_card
+from evals.fixture import IDENTITY, INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, JIRA_ISSUES, State, display_id
 
 LOG_FILE = "engineering/log.md"
 HUB_FILE = "learnings/README.md"
@@ -31,12 +31,12 @@ def expect(cond: bool, msg: str) -> list[str]:
     return [] if cond else [msg]
 
 
-def one_board_commit(s: State, verb: str) -> list[str]:
+def one_board_commit(s: State, verb: str, repo: str = "demo") -> list[str]:
     f = expect(len(s.store_commits) == 1, f"store commits: want 1, got {[c[0] for c in s.store_commits]}")
     if s.store_commits:
         subject, files = s.store_commits[0]
         f += expect(files == [BOARD_FILE], f"store commit touches {files}")
-        f += expect(subject.startswith(f"docs(board): {verb} · demo"), f"subject {subject!r}")
+        f += expect(subject.startswith(f"docs(board): {verb} · {repo}"), f"subject {subject!r}")
     return f
 
 
@@ -47,6 +47,11 @@ def no_store_commit(s: State) -> list[str]:
 def demo_untouched(s: State) -> list[str]:
     return (expect(s.demo_porcelain == "", f"demo working tree changed: {s.demo_porcelain!r}")
             + expect(not s.demo_remote_subjects, f"demo remote changed: {s.demo_remote_subjects}"))
+
+
+def read_jira(s: State) -> bool:
+    return (any("jira_issue.py" in c for c in s.commands)
+            or any(k.endswith(":jira") for k in s.skills))
 
 
 def mentions_board(s: State) -> bool:
@@ -114,6 +119,75 @@ def check_put_after(s: State) -> list[str]:
             + expect(ids(s.board_next) == ["DEMO-001", "DEMO-007", "DEMO-002"], f"Next: {ids(s.board_next)}")
             + expect(card("DEMO-007", "Health endpoint") in s.board_next, f"card: {s.board_next}")
             + expect(ids(s.board_progress) == ["DEMO-006", "DEMO-003", "DEMO-005"], "In Progress changed"))
+
+
+OPS_041 = jira_card("OPS-041", JIRA_ISSUES["OPS-041"][0])
+SEED_STATUS = {display_id(k): v[1] for k, v in ITEMS.items()}
+UNRESOLVED_RE = re.compile(r"\b(Done|closed)\b|no item|not in (the )?registry|missing", re.I)
+
+
+def check_put_jira(s: State) -> list[str]:
+    return (one_board_commit(s, "put", "ops") + demo_untouched(s)
+            + expect(s.board_next == [jira_card("OPS-043", JIRA_ISSUES["OPS-043"][0])] + INITIAL_NEXT,
+                     f"Next: {s.board_next}")
+            + expect(read_jira(s), "Jira was not read to make the card"))
+
+
+def check_put_jira_no_access(s: State) -> list[str]:
+    return (no_store_commit(s) + demo_untouched(s)
+            + expect(bool(re.search(r"jira", s.output, re.I)), "output does not name the missing Jira access"))
+
+
+def check_put_jira_unknown(s: State) -> list[str]:
+    return (no_store_commit(s) + demo_untouched(s)
+            + expect("OPS-999" in s.output, "output does not name OPS-999"))
+
+
+def check_show_jira(s: State) -> list[str]:
+    o = s.output
+    # a table row pairs a Next cell with an In Progress cell: judge the cell that names OPS-041
+    parts = [p for line in o.splitlines()
+             for p in (re.split(r"(?<!\\)\|", line) if line.lstrip().startswith("|") else [line])]
+    flagged = [p.strip() for p in parts if "OPS-041" in p and UNRESOLVED_RE.search(p)]
+    return (no_store_commit(s) + demo_untouched(s)
+            + expect("OPS-041" in o and JIRA_ISSUES["OPS-041"][0] in o, "Jira card not shown")
+            + expect(not read_jira(s), "show read Jira")
+            + expect(not flagged, f"OPS-041 flagged from Jira's status: {flagged}"))
+
+
+def check_pull_jira(s: State) -> list[str]:
+    return (one_board_commit(s, "pull", "ops") + demo_untouched(s) + no_local_commit(s)
+            + expect(s.demo_status == SEED_STATUS, f"demo status moved: {s.demo_status}")
+            + expect(s.board_progress[:1] == [OPS_041], f"In Progress top: {s.board_progress[:1]}")
+            + expect("OPS-041" not in ids(s.board_next), "card still in Next")
+            + expect(s.board_progress[1:] == INITIAL_PROGRESS, "other In Progress cards changed")
+            + expect(not read_jira(s), "pull read Jira for a card that exists"))
+
+
+def check_close_jira(s: State) -> list[str]:
+    return (one_board_commit(s, "close", "ops") + demo_untouched(s) + no_local_commit(s)
+            + expect("OPS-041" not in ids(s.board_progress + s.board_next), "card still on board")
+            + expect(s.board_next == INITIAL_NEXT, f"Next changed: {ids(s.board_next)}")
+            + expect(s.board_progress == INITIAL_PROGRESS, f"In Progress changed: {ids(s.board_progress)}")
+            + expect(not read_jira(s), "close read Jira"))
+
+
+def check_pull_jira_no_card(s: State) -> list[str]:
+    return (no_store_commit(s) + demo_untouched(s) + no_local_commit(s)
+            + expect(not read_jira(s), "pull read Jira for an issue without a card")
+            + expect(bool(re.search(r"\bput\b", s.output, re.I)), "output does not send the author to `next put`"))
+
+
+def check_pull_unregistered(s: State) -> list[str]:
+    return (no_store_commit(s) + demo_untouched(s) + no_local_commit(s)
+            + expect(bool(re.search(r"regist", s.output, re.I)), "output does not name the registry"))
+
+
+def check_jira_transition(s: State) -> list[str]:
+    return (no_store_commit(s) + demo_untouched(s)
+            + expect(not any(k.endswith(":backlog-ops") or k == "backlog-ops" for k in s.skills),
+                     f"backlog-ops invoked: {s.skills}")
+            + expect("OPS-042" in s.output, "no answer about OPS-042"))
 
 
 def check_put_in_progress(s: State) -> list[str]:
@@ -458,6 +532,17 @@ CASES = [
     Case("pull-board-unwritable", "backlog-ops", "pull DEMO-007", check_pull_board_unwritable, board_contract=False),
     Case("next-show", "next", "/next", check_show),
     Case("next-put-after", "next", "put DEMO-007 after DEMO-001", check_put_after),
+    Case("next-put-jira", "next", "put ops OPS-043 next", check_put_jira, jira=True),
+    Case("next-put-jira-no-access", "next", "put ops OPS-042 next", check_put_jira_no_access),
+    Case("next-put-jira-unknown", "next", "put ops OPS-999 next", check_put_jira_unknown, jira=True),
+    Case("next-show-jira", "next", "/next", check_show_jira, jira=True, jira_card=True),
+    Case("pull-jira", "backlog-ops", "pull OPS-041", check_pull_jira, jira=True, jira_card=True),
+    Case("close-jira", "backlog-ops", "close OPS-041", check_close_jira, jira=True, jira_card=True),
+    Case("pull-jira-no-card", "backlog-ops", "pull ops OPS-042", check_pull_jira_no_card, jira=True),
+    Case("pull-unregistered", "backlog-ops", "pull FOO-001", check_pull_unregistered),
+    # No skill: a should-not-trigger guard passes at the base by design, so the gate's RED rule cannot apply.
+    Case("trigger-jira-transition", None, "transition OPS-042 to Done in Jira", check_jira_transition,
+         jira=True, jira_card=True),
     Case("next-put-in-progress", "next", "put DEMO-003 next", check_put_in_progress),
     Case("next-drop", "next", "drop DEMO-005 from the board", check_drop),
     Case("next-only-logbook", "next", "/next", check_only_logbook, board=False, logbook=True),

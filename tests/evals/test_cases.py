@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from evals.board import BOARD_FILE, card
+from evals.board import BOARD_FILE, card, jira_card
 from evals.cases import CASES, RUBRIC, flagged
-from evals.fixture import INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, State, build, display_id
+from evals.fixture import INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, JIRA_ISSUES, State, build, display_id
 
 REPO = Path(__file__).resolve().parents[2]
 SKILLS = REPO / "plugins/xxthunder-dev-skills/skills"
@@ -45,8 +45,8 @@ def status(s: State, **changes: str) -> dict[str, str]:
     return {**s.demo_status, **{k.replace("_", "-"): v for k, v in changes.items()}}
 
 
-def board_commit(verb: str) -> list[tuple[str, list[str]]]:
-    return [(f"docs(board): {verb} · demo · x (DEMO-000)", [BOARD_FILE])]
+def board_commit(verb: str, repo: str = "demo") -> list[tuple[str, list[str]]]:
+    return [(f"docs(board): {verb} · {repo} · x (DEMO-000)", [BOARD_FILE])]
 
 
 SHOW_OUTPUT = """
@@ -60,6 +60,11 @@ Contradictions:
 - DEMO-005 is Done but still on the board.
 - DEMO-006: the card says "Cache the token", the item says "Cache the API token".
 """
+
+JIRA_READ = ["uv run /x/scripts/jira_issue.py get OPS-041"]
+JIRA_041 = jira_card("OPS-041", JIRA_ISSUES["OPS-041"][0])
+SHOW_JIRA_OUTPUT = SHOW_OUTPUT.replace(
+    "| | DEMO-005", "| OPS-041 — Rotate the build agents' certificates | DEMO-005")
 
 
 def expected(name: str) -> State:
@@ -94,6 +99,29 @@ def expected(name: str) -> State:
                        output="Pulled DEMO-007. Board: the store has no `Board` section, no card moved.")
     if name == "next-show":
         return replace(s, output=SHOW_OUTPUT)
+    if name == "next-put-jira":
+        return replace(s, store_commits=board_commit("put", "ops"),
+                       board_next=[jira_card("OPS-043", JIRA_ISSUES["OPS-043"][0])] + INITIAL_NEXT,
+                       commands=["uv run /x/scripts/jira_issue.py get OPS-043"])
+    if name == "next-put-jira-no-access":
+        return replace(s, output="I have no Jira access in this session, so OPS-042 gets no card.")
+    if name == "next-put-jira-unknown":
+        return replace(s, output="Jira does not know OPS-999; no card.",
+                       commands=["uv run /x/scripts/jira_issue.py get OPS-999"])
+    if name == "next-show-jira":
+        return replace(s, output=SHOW_JIRA_OUTPUT, board_next=INITIAL_NEXT + [JIRA_041])
+    if name == "pull-jira":
+        return replace(s, store_commits=board_commit("pull", "ops"), board_next=INITIAL_NEXT,
+                       board_progress=[JIRA_041] + INITIAL_PROGRESS)
+    if name == "close-jira":
+        return replace(s, store_commits=board_commit("close", "ops"), board_next=INITIAL_NEXT)
+    if name == "pull-jira-no-card":
+        return replace(s, output="OPS-042 has no card on the board. Put it on the board first with `next put`.")
+    if name == "pull-unregistered":
+        return replace(s, output="FOO-001 is neither an item of this backlog nor in the board's registry: "
+                                 "no row for FOO.")
+    if name == "trigger-jira-transition":
+        return replace(s, skills=["jira:jira"], output="I can only read OPS-042 here, not transition it.")
     if name == "next-put-after":
         return replace(s, store_commits=board_commit("put"),
                        board_next=[INITIAL_NEXT[0], card("DEMO-007", "Health endpoint"), INITIAL_NEXT[1]])
@@ -176,7 +204,8 @@ def test_case_passes_on_its_expected_end_state(case):
 
 def test_every_case_names_an_existing_skill():
     for c in CASES:
-        assert (c.skill is None and c.name.startswith("rubric-")) or (SKILLS / c.skill / "SKILL.md").is_file(), c.name
+        skill_less = c.name.startswith("rubric-") or c.name == "trigger-jira-transition"  # the routing guard
+        assert (c.skill is None and skill_less) or (SKILLS / c.skill / "SKILL.md").is_file(), c.name
 
 
 def test_every_skill_has_a_case():
@@ -217,6 +246,80 @@ def test_show_as_two_separate_tables_fails():
 def test_show_that_writes_into_the_consumer_fails():
     s = replace(expected("next-show"), demo_porcelain=" M docs/backlog/README.md\n")
     assert any("demo working tree" in f for f in BY_NAME["next-show"].check(s))
+
+
+def test_show_jira_that_reads_jira_fails():
+    s = replace(expected("next-show-jira"), commands=JIRA_READ)
+    assert any("Jira" in f for f in BY_NAME["next-show-jira"].check(s))
+
+
+def test_show_jira_that_flags_the_done_issue_fails():
+    s = replace(expected("next-show-jira"), output=SHOW_JIRA_OUTPUT + "- OPS-041 is Done but still on the board.\n")
+    assert any("OPS-041" in f for f in BY_NAME["next-show-jira"].check(s))
+
+
+def test_put_jira_with_the_pipe_unescaped_fails():
+    s = expected("next-put-jira")
+    bad = s.board_next[0].replace("\\|", "|")
+    assert any("Next" in f for f in BY_NAME["next-put-jira"].check(replace(s, board_next=[bad] + INITIAL_NEXT)))
+
+
+def test_pull_jira_that_touches_the_repo_fails():
+    s = replace(expected("pull-jira"), demo_remote_subjects=["docs(backlog): pull OPS-041"])
+    assert any("demo" in f for f in BY_NAME["pull-jira"].check(s))
+
+
+def test_close_jira_that_reads_jira_fails():
+    s = replace(expected("close-jira"), commands=JIRA_READ)
+    assert any("Jira" in f for f in BY_NAME["close-jira"].check(s))
+
+
+def test_show_jira_that_flags_the_done_issue_in_its_cell_fails():
+    s = replace(expected("next-show-jira"), output=SHOW_JIRA_OUTPUT.replace("certificates |", "certificates (Done) |"))
+    assert any("OPS-041" in f for f in BY_NAME["next-show-jira"].check(s))
+
+
+def test_show_jira_judges_the_cell_of_an_indented_row():
+    indented = "\n".join("  " + line for line in SHOW_JIRA_OUTPUT.splitlines())
+    assert BY_NAME["next-show-jira"].check(replace(expected("next-show-jira"), output=indented)) == []
+
+
+@pytest.mark.parametrize("flag", ["(no item)", "(not in the registry)", "(missing)"])
+def test_show_jira_that_calls_the_card_unresolved_fails(flag):
+    s = replace(expected("next-show-jira"), output=SHOW_JIRA_OUTPUT.replace("certificates |", f"certificates {flag} |"))
+    assert any("OPS-041" in f for f in BY_NAME["next-show-jira"].check(s))
+
+
+@pytest.mark.parametrize("name", ["pull-jira", "close-jira", "pull-jira-no-card", "pull-unregistered"])
+def test_jira_board_move_that_commits_in_the_repo_fails(name):
+    s = replace(expected(name), demo_local_subjects=["docs(backlog): pull OPS-041"])
+    assert any("committed" in f for f in BY_NAME[name].check(s))
+
+
+def test_pull_jira_that_moves_a_status_fails():
+    s = expected("pull-jira")
+    s = replace(s, demo_status=status(s, DEMO_001="In Progress"))
+    assert any("status" in f for f in BY_NAME["pull-jira"].check(s))
+
+
+def test_pull_jira_no_card_that_reads_jira_fails():
+    s = replace(expected("pull-jira-no-card"), commands=["uv run /x/scripts/jira_issue.py get OPS-042"])
+    assert any("Jira" in f for f in BY_NAME["pull-jira-no-card"].check(s))
+
+
+def test_pull_jira_no_card_that_makes_a_card_fails():
+    s = replace(expected("pull-jira-no-card"), store_commits=board_commit("pull", "ops"))
+    assert any("store" in f for f in BY_NAME["pull-jira-no-card"].check(s))
+
+
+def test_pull_unregistered_that_moves_a_card_fails():
+    s = replace(expected("pull-unregistered"), store_commits=board_commit("pull", "foo"))
+    assert any("store" in f for f in BY_NAME["pull-unregistered"].check(s))
+
+
+def test_jira_transition_that_invokes_backlog_ops_fails():
+    s = replace(expected("trigger-jira-transition"), skills=["xxthunder-dev-skills:backlog-ops"])
+    assert any("backlog-ops" in f for f in BY_NAME["trigger-jira-transition"].check(s))
 
 
 def test_logbook_done_that_still_suggests_next_drop_fails():
