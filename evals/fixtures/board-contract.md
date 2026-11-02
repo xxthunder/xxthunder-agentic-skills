@@ -17,24 +17,36 @@ this repository; keep it complete.
   is the item's heading without its `[ID]` and done marker, in the item's own language. The
   reason is optional, the author's, and English.
   Example: `[ZK-012](https://example.com/team/notes/src/branch/main/docs/backlog/zk-012.md) · [zettelkasten](https://example.com/team/notes) — Lint rejects wiki-links · before the next export`
-- **Escaping**: a `|` in a title or reason is written `\|`.
+  A Jira card: `[<KEY-123>](<site>/browse/<KEY-123>) · [<name>](<web>) — <summary> [· <why now>]`,
+  the summary as the issue had it when the card was made.
+- **Escaping**: a `|` in a title, summary or reason is written `\|`.
 - **Links**: `<web>` is the web link on the repo's name in `engineering/repos.md`. The item
   link is `<web>` plus the item's path on the repo's default branch — GitHub
   `<web>/blob/<branch>/<path>`, Gitea `<web>/src/branch/<branch>/<path>`, Bitbucket Server
   `<web>/browse/<path>`. An address `<repo> #<n>` is written `[#<n>](<web>/issues/<n>) ·
   [<repo>](<web>)` and has no title, only the reason.
-- **What a card never holds**: status or priority — they are read from the item.
+- **What a card never holds**: status or priority — they are read from the item. A Jira card is
+  a snapshot: it is shown as written, and nothing reads Jira after the card is made.
 - **Moves**: a pull puts the item's card into *In Progress* — out of *Next*, or new; a close
   takes it off the board. Only work gets a card: an epic and the ongoing refinement item
   never do. `put` places or moves a card in *Next*; `drop` removes one from either column.
-  Every write reads the title of the card it writes fresh from the item.
+  Every write reads the title of the card it writes fresh from the item — except a Jira card:
+  Jira is read only when its card is made, by a put, through the session's own Jira access;
+  without access, no card. A pull of a Jira issue without a card makes none: put it on the
+  board first. Moving or dropping a Jira card reads nothing. Nothing on the board ever writes
+  to Jira.
 - **Address**: as in the logbook — `<repo>` is the name in the first column of
   `engineering/repos.md`; a repo without a backlog uses `<repo> #<issue>`. A repo missing
-  from the registry gets no card: the skill says so, and the author adds the row.
+  from the registry gets no card: the skill says so, and the author adds the row. A Jira issue
+  uses `<name> <KEY-123>`, where `<name>` is the first column of the registry's Jira projects
+  table.
 - **Repos**: the registry's **Remote** column is the remote. The local checkout is
   `~/dev/<org>/<repo>`, where `<org>` and `<repo>` are the remote's path
   (`git@example.com:team/notes.git` → `~/dev/team/notes`). A repo not cloned there is
   cloned there, after the author agrees.
+- **Jira projects**: `engineering/repos.md` has a second table,
+  `| Jira project | Site | Key | What it is |`. The name links to the project — the card's
+  `<web>` —, Site is the Jira base URL, Key the project key.
 - **Commit**: one commit per change, pushed immediately, with the subject
   `docs(board): <put|drop|pull|close> · <repo> · <text> (<ITEM-ID>)` — `<text>` is the new
   position, the reason for a drop — or the item's title when the author gave none — or the
