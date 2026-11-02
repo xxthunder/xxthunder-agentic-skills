@@ -9,6 +9,9 @@
 ## Table of Contents
 
 ### Open
+- [XAS-063 — Loose ends of the XAS-049 gate](xas-063.md)
+- [XAS-062 — The gate takes over the rubric's mechanical checks](xas-062.md)
+- [XAS-061 — CI takes part in the gate](xas-061.md)
 - [XAS-052 — Agents read the backlog through `backlog.py`, not its files](xas-052.md)
 - [XAS-050 — Eval sessions get only the permissions the sandbox needs](xas-050.md)
 - [XAS-048 — Lint and format a file after the agent saves it](xas-048.md)
