@@ -58,6 +58,13 @@ The `pyproject.toml` and `tests/` harness is deliberately **not** a container.
 It sets `package = false` and ships to nobody — it exists so `uv run pytest`
 can exercise the plugin helper scripts and the hook.
 
+The same holds for the push gate, which also ships to nobody. `evals/` runs
+behavioural eval cases headless against `xxthunder-dev-skills` at a git ref and
+keeps their results outside the checkout (ADR-0012). `scripts/gate` runs pytest
+and then checks those results for the cases a change asks for; it never runs an
+eval (ADR-0014). `.githooks/pre-push`, installed with `core.hooksPath`, calls
+the gate before every push.
+
 ## Components
 
 ```mermaid
@@ -339,6 +346,34 @@ subject come from the store's `AGENTS.md` (ADR-0008). `show` reports
 contradictions between the board and the backlogs rather than smoothing them
 over, and writes nothing. `backlog-ops` moves cards on pull and close
 (ADR-0011); `next` places and drops them by hand.
+
+### Pushing a change
+
+```mermaid
+sequenceDiagram
+    participant U as Maintainer
+    participant H as .githooks/pre-push
+    participant G as scripts/gate
+    participant T as pytest
+    participant R as Eval results (outside the checkout)
+    U->>H: git push
+    H->>G: --pre-push, pushed refs on stdin
+    G->>T: pytest -q
+    loop each pushed commit
+        G->>G: touched skills and changed cases since the merge-base
+        G->>R: results for the plugin version and case fingerprint
+    end
+    alt all green
+        G-->>H: exit 0, push goes on
+    else a result missing
+        G-->>U: gate: red, and the `python -m evals run` command
+    end
+```
+
+The gate never runs an eval. It reads the results the runner left under the
+plugin's tree hash, and counts only those whose fingerprint matches the case as
+it is at the pushed commit (ADR-0014). The author runs the printed command and
+pushes again; `git push --no-verify` skips the hook.
 
 ### Digitising paperwork
 
