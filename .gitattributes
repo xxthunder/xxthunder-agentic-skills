@@ -1,0 +1,2 @@
+scripts/gate text eol=lf
+.githooks/* text eol=lf
