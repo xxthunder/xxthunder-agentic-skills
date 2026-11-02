@@ -37,7 +37,6 @@
 
 ### In Progress
 - [XAS-060 — A board move goes through a script, not through the agent's hand edit](xas-060.md)
-- [XAS-059 — The skill repo's rubric guides the loop's reviewer](xas-059.md)
 - [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
 - [XAS-055 — An item runs from the board through the superpowers loop to its repo's gate and an evidence package](xas-055.md)
 - [XAS-053 — The board shows Jira issues next to backlog items](xas-053.md)
@@ -49,6 +48,7 @@
 - [XAS-001 — Backlog refinement](xas-001.md)
 
 ### Done
+- [XAS-059 — The skill repo's rubric guides the loop's reviewer](xas-059.md)
 - [XAS-057 — Every `SKILL.md` frontmatter is checked by a test](xas-057.md)
 - [XAS-056 — `evals/` is checked against skill-creator's eval tooling: keep, align or replace](xas-056.md)
 - [XAS-054 — Skill work adopts superpowers and skill-creator before it builds its own](xas-054.md)
