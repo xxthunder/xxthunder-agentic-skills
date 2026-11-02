@@ -28,12 +28,12 @@ Developer workflow skills:
 | Skill | Description |
 |---|---|
 | [**architecture-scan**](plugins/xxthunder-dev-skills/skills/architecture-scan/SKILL.md) | Read-only scan — derives real structure from the repo, proposes a bootstrap when `architecture.md` is absent, reports drift when it is not |
-| [**backlog-ops**](plugins/xxthunder-dev-skills/skills/backlog-ops/SKILL.md) | Lifecycle operations on backlog items — pull, tick acceptance/UAT criteria, close with epic-status cascade; moves the item's card on a configured board at pull and close |
+| [**backlog-ops**](plugins/xxthunder-dev-skills/skills/backlog-ops/SKILL.md) | Lifecycle operations on backlog items — pull, tick acceptance/UAT criteria, close with epic-status cascade; moves the item's card on a configured board at pull and close — for a Jira issue on the board, the card only |
 | [**commit-helper**](plugins/xxthunder-dev-skills/skills/commit-helper/SKILL.md) | Conventional commit creation with mandatory pre-commit checks |
 | [**design-record**](plugins/xxthunder-dev-skills/skills/design-record/SKILL.md) | Durable design record — drafts ADRs with numbering and a derived index, and edits the slotted `architecture.md` |
 | [**learnings**](plugins/xxthunder-dev-skills/skills/learnings/SKILL.md) | Captures what outlives a repository into the author's personal knowledge repo — configured on the machine, never named in any repo — and recalls it at the start of a topic |
 | [**logbook**](plugins/xxthunder-dev-skills/skills/logbook/SKILL.md) | Chronicles what each session starts, notes and finishes into the author's logbook repo — one line per event, across all repositories; suggested by `backlog-ops` at pull and close |
-| [**next**](plugins/xxthunder-dev-skills/skills/next/SKILL.md) | Shows the Kanban board — what comes next and what is in progress across all repositories — from one board file in its own store, each card's status and priority read fresh from its own backlog at `origin/HEAD` |
+| [**next**](plugins/xxthunder-dev-skills/skills/next/SKILL.md) | Shows the Kanban board — what comes next and what is in progress across all repositories — from one board file in its own store, each backlog card's status and priority read fresh from its own backlog at `origin/HEAD`; a Jira card is shown as it was written at `put` |
 | [**refinement**](plugins/xxthunder-dev-skills/skills/refinement/SKILL.md) | Interactive backlog refinement sessions — review project state, prioritize work, add new items, discuss architecture |
 | [**retrospective**](plugins/xxthunder-dev-skills/skills/retrospective/SKILL.md) | Incident-driven learning — captures lessons from unmet expectations and encodes them into project guidelines |
 
@@ -126,7 +126,7 @@ Skills trigger automatically based on conversation context, or can be invoked ex
 
 **xxthunder-dev-skills**
 - [**architecture-scan**](plugins/xxthunder-dev-skills/skills/architecture-scan/SKILL.md): "check the docs against reality", "is the architecture doc still true", "bootstrap the architecture doc"
-- [**backlog-ops**](plugins/xxthunder-dev-skills/skills/backlog-ops/SKILL.md): "start XAS-025", "tick AC 2 on XAS-025", "close XAS-025"
+- [**backlog-ops**](plugins/xxthunder-dev-skills/skills/backlog-ops/SKILL.md): "start XAS-025", "tick AC 2 on XAS-025", "close XAS-025"; "pull PROJ-123", "close PROJ-123" for a Jira issue whose card is on the board
 - [**commit-helper**](plugins/xxthunder-dev-skills/skills/commit-helper/SKILL.md): triggered when creating commits
 - [**design-record**](plugins/xxthunder-dev-skills/skills/design-record/SKILL.md): "record an ADR", "document this decision", "update the architecture doc"
 - [**learnings**](plugins/xxthunder-dev-skills/skills/learnings/SKILL.md): "capture that", "that's a learning", "what do I know about X" — also proposed when the author corrects the agent

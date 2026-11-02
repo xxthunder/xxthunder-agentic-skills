@@ -1,6 +1,6 @@
 ---
 name: backlog-ops
-description: "Apply lifecycle operations to a backlog item — pull (Open → In Progress), tick an acceptance or UAT criterion, or close an item (→ Done) with automatic epic-status cascade. Stages file edits and never produces its own commit in the repository; a pull is handed to commit-helper for the default branch, and a configured Kanban board gets the item's card moved on pull and close. Trigger with: 'start XAS-025', 'pull XAS-025', 'mark AC 2 done on XAS-025', 'tick UAT 1 on XAS-025', 'close XAS-025', 'complete XAS-025'."
+description: "Apply lifecycle operations to a backlog item — pull (Open → In Progress), tick an acceptance or UAT criterion, or close an item (→ Done) with automatic epic-status cascade. Stages file edits and never produces its own commit in the repository; a pull is handed to commit-helper for the default branch, and a configured Kanban board gets the item's card moved on pull and close. Trigger with: 'start XAS-025', 'pull XAS-025', 'mark AC 2 done on XAS-025', 'tick UAT 1 on XAS-025', 'close XAS-025', 'complete XAS-025' — also for a Jira issue key whose card is on the board ('pull PROJ-123', 'close PROJ-123'): then it moves that card and nothing else. It never reads or changes an issue in Jira; a request to change an issue in Jira is not for this skill."
 allowed-tools: Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/store *)
 ---
 
@@ -52,6 +52,24 @@ Given an ID like `XAS-025` or `XAS-003a`:
 3. Read the file. Extract current `**Status**:`, the Acceptance Criteria block, and the UAT block if present.
 
 The item's `**Status**:` line is its current status. The README follows from it; `set-status` and `toc` regenerate it.
+
+**An ID from outside this backlog.** Before a pull or a complete looks for the file, check
+the ID's prefix. This repository's own prefix is the one on the backlog README's
+`**ID prefix**:` line.
+
+- **The own prefix**: the ID is an item of this backlog — always, even when the board's
+  registry also lists that prefix as a Jira key. Go on with the item file as above.
+- **Any other prefix**: resolve the board and read its contract ([Board move](#board-move),
+  steps 1–2). No board configured → say there is nothing to do here for an ID outside this
+  backlog, and stop. Otherwise the contract's registry decides:
+  - **A Jira project key** → the ID is a Jira address. The operation is the board move and
+    nothing else: no item file, no `backlog.py`, no precondition checks, no commit in this
+    repository, no read of Jira and no write to it. Go straight to
+    [Board move](#board-move), step 3.
+  - **Another repository's ID prefix** → say the ID is an item of that repository, name it,
+    and stop: its pull or close runs in its own checkout.
+  - **Neither** → say the ID is neither an item of this backlog nor in the registry, name the
+    missing registry row, and stop — no item lookup, no board move.
 
 ### Step 2: Apply the operation
 
@@ -122,14 +140,15 @@ A board is the author's Kanban board in a store of its own, configured on the ma
    "${CLAUDE_PLUGIN_ROOT}/scripts/store" contract "<store>" Board
    ```
    A non-zero exit: keep the message for the summary and skip the step. The contract names the board file, its columns and order, the card format and link, and the commit subject — this skill ships none of them.
-3. **Address the card** as the contract says, with this repository's name and the item ID. A repo the contract's registry does not list: name the missing row in the summary and write no card.
+3. **Address the card** as the contract says, with this repository's name and the item ID — for a Jira address, the Jira project's name from the registry and the issue key. A repo the contract's registry does not list: name the missing row in the summary and write no card.
 4. **Move it**:
    - after a **pull**: read the item with
      ```bash
      uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" show --in-progress <ID>
      ```
      It prints the item's line only when the item is In Progress *as work* — never for an epic or the ongoing refinement item, which get no card. No line → no card, nothing to do. Otherwise the item's card goes into the in-progress column at the place the contract names — out of the waiting column if it is there, newly made otherwise — with the title exactly as the script prints it. A card already in the in-progress column is left where it is.
-   - after a **complete**: the item's card leaves the board. No card → nothing to do.
+   - after a **pull** of a Jira address: no `show`, no read of Jira — the card moves from the waiting column into the in-progress column exactly as written; one already in the in-progress column stays where it is. An issue with no card on the board gets none: no card, no commit — say to put it on the board first with `next put`, and stop.
+   - after a **complete**: the item's card leaves the board — a Jira card as written, without reading Jira. No card → nothing to do.
 
    Only the item named in the operation moves; keep every other card exactly as it was, in the layout the contract names.
 5. **Commit and push the board file alone**, with the contract's subject — only when step 4 changed it; nothing changed, no commit:
@@ -153,6 +172,8 @@ Then, after a **pull** or a **complete** only, one last line — a suggestion, n
   asks it itself.
 
 This skill does not know whether a logbook is configured; `logbook` finds out and says so.
+
+**For a Jira address** the summary names the board move only — or why there was none. Nothing is staged in this repository, so skip the line about the pull's commit and push and skip the "Staged but not committed" reminder. The logbook suggestion still applies, with the Jira address.
 
 ## What This Skill Does NOT Do
 
