@@ -143,6 +143,18 @@ def test_shared_reads_pycache_only_inside_root(tmp_path):
     assert shared(root, CASES) == shared(copy_evals(tmp_path / "plain"), CASES)
 
 
+def test_shared_ignores_the_tooling_around_the_cases(tmp_path):
+    root = copy_evals(tmp_path)
+    before = shared(root, CASES)
+    for name in ("gate.py", "__main__.py", "fingerprint.py"):
+        with (root / name).open("a", encoding="utf-8") as f:
+            f.write("# changed\n")
+        assert shared(root, CASES) == before, name
+    with (root / "runner.py").open("a", encoding="utf-8") as f:
+        f.write("# changed\n")
+    assert shared(root, CASES) != before
+
+
 def test_shared_reads_only_the_listed_files(tmp_path):
     root = copy_evals(tmp_path)
     listed = [p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()]

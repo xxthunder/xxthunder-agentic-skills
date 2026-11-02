@@ -13,6 +13,7 @@ from pathlib import Path
 
 FIELDS = ("name", "prompt", "board", "logbook", "board_contract", "learnings")  # for a case that is no dataclass
 BY_SOURCE = {"skill", "check", "setup"}  # not by value: the skill names no version, check and setup enter by source
+TOOLING = {"__main__.py", "fingerprint.py", "gate.py"}  # top-level files no case imports: changing them changes no result
 
 
 def digest(*parts: bytes) -> str:
@@ -52,6 +53,8 @@ def shared(root: Path, cases, files: list[str] | None = None) -> str:
                  if p.is_file() and "__pycache__" not in p.relative_to(root).parts]
     parts = []
     for rel in sorted(files):
+        if rel in TOOLING:
+            continue
         data = (root / rel).read_bytes().replace(b"\r\n", b"\n")  # a CRLF checkout (core.autocrlf) hashes like its LF archive
         if rel == "cases.py":
             data = stripped_cases(data.decode("utf-8"), cases).encode("utf-8")
