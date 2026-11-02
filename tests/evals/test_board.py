@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from evals.board import WEB, board_md, card, ids, parse_board
+from evals.board import WEB, board_md, card, ids, jira_card, parse_board
 
 
 def test_card_links_item_and_repo():
@@ -52,3 +52,12 @@ def test_a_row_with_three_cells_is_an_error():
 
 def test_ids_reads_the_item_ids_of_cards():
     assert ids([card("DEMO-004a", "Sub"), card("DEMO-001", "One")]) == ["DEMO-004a", "DEMO-001"]
+
+
+def test_jira_card_follows_the_contract_form():
+    assert jira_card("OPS-042", "Move the nightly build to the new runner") == (
+        "[OPS-042](https://jira.example.com/browse/OPS-042) · [ops](https://jira.example.com/projects/OPS)"
+        " — Move the nightly build to the new runner"
+    )
+    assert jira_card("OPS-042", "t", reason="x").endswith(" · x")
+    assert "a \\| b" in jira_card("OPS-042", "a | b")

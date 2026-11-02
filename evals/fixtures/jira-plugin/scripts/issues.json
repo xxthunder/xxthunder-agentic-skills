@@ -1,0 +1,5 @@
+{
+  "OPS-041": {"summary": "Rotate the build agents' certificates", "status": "Done"},
+  "OPS-042": {"summary": "Move the nightly build to the new runner", "status": "To Do"},
+  "OPS-043": {"summary": "Split the deploy job | keep the old one as fallback", "status": "To Do"}
+}

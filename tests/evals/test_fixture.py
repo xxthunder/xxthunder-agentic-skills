@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import pytest
 
-from evals.board import BOARD_FILE, ids
+from evals.board import BOARD_FILE, ids, jira_card
 from evals.fixture import (
     INITIAL_NEXT,
     INITIAL_PROGRESS,
+    JIRA_ISSUES,
     build,
     display_id,
     sandbox_contract,
@@ -141,3 +142,19 @@ def test_text_files_skips_binaries_git_and_caches(tmp_path):
         (tmp_path / d).mkdir()
         (tmp_path / d / "x.txt").write_text("x", encoding="utf-8")
     assert text_files(tmp_path) == {"notes.md": "ü\n"}
+
+
+def test_registry_has_the_jira_projects_table(sandbox):
+    repos = (sandbox / "store" / "engineering" / "repos.md").read_text(encoding="utf-8")
+    assert "| Jira project | Site | Key | What it is |" in repos
+    assert "| [ops](https://jira.example.com/projects/OPS) | https://jira.example.com | OPS | Ops team |" in repos
+
+
+def test_build_with_jira_card_seeds_it_at_the_bottom_of_next(tmp_path):
+    build(tmp_path / "with", jira_card=True)
+    build(tmp_path / "without")
+    summary = JIRA_ISSUES["OPS-041"][0]
+    s = snapshot(tmp_path / "with", "", [])
+    assert s.board_next == INITIAL_NEXT + [jira_card("OPS-041", summary)]
+    assert s.board_progress == INITIAL_PROGRESS
+    assert snapshot(tmp_path / "without", "", []).board_next == INITIAL_NEXT

@@ -26,7 +26,9 @@ def digest(*parts: bytes) -> str:
 def own(case) -> str:
     """Hash of what only this case holds: prompt, flags, and the source of its check and setup."""
     setup = getattr(case, "setup", None)
-    names = ([f.name for f in dataclasses.fields(case) if f.name not in BY_SOURCE]
+    # a dataclass field outside FIELDS enters only off its default: a new flag leaves old cases' hashes alone
+    names = ([f.name for f in dataclasses.fields(case) if f.name not in BY_SOURCE
+              and (f.name in FIELDS or f.default is dataclasses.MISSING or getattr(case, f.name) != f.default)]
              if dataclasses.is_dataclass(case) else FIELDS)
     values = [repr(getattr(case, f, None)) for f in names]
     values += [inspect.getsource(case.check), inspect.getsource(setup) if setup else ""]

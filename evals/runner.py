@@ -17,7 +17,7 @@ import tempfile
 from pathlib import Path
 
 from evals.cases import Case
-from evals.fixture import build, mark_seed, snapshot
+from evals.fixture import JIRA_PLUGIN, build, mark_seed, snapshot
 
 PLUGIN = "plugins/xxthunder-dev-skills"
 STORE_PREFIXES = ("BOARD", "LOGBOOK", "LEARNINGS")
@@ -128,7 +128,8 @@ def parse_stream(stream: str) -> tuple[str, list[str], list[str]]:
 def run_one(case: Case, plugin_dirs: list[Path], n: int, out: Path, fp: str = "") -> dict:
     sandbox = out / f"{case.name}-{n}"
     remove_tree(sandbox)
-    build(sandbox, case.board_contract)
+    build(sandbox, case.board_contract, case.jira_card)
+    plugin_dirs = plugin_dirs + [JIRA_PLUGIN] if case.jira else plugin_dirs
     if case.setup:
         case.setup(sandbox / "checkouts" / "demo")
         mark_seed(sandbox)

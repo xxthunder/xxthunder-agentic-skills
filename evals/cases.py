@@ -445,6 +445,8 @@ class Case:
     board_contract: bool = True   # the store's AGENTS.md has a `Board` section
     learnings: bool = False       # LEARNINGS_* point at the sandbox store
     setup: Callable[[Path], None] | None = None  # runs in the demo checkout before the seed tag
+    jira: bool = False            # the fake Jira plugin is loaded
+    jira_card: bool = False       # the seed board carries a Jira card
 
 
 CASES = [

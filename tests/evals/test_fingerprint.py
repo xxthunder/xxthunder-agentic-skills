@@ -163,3 +163,48 @@ def test_shared_reads_only_the_listed_files(tmp_path):
     (root / "notes.txt").write_text("a stray file\n", encoding="utf-8")
     assert shared(root, CASES, listed) == before
     assert shared(root, CASES) != before
+
+
+def test_a_field_added_with_its_default_leaves_own_unchanged():
+    @dataclass
+    class Old:
+        name: str
+        prompt: str
+        check: object
+
+    @dataclass
+    class New:
+        name: str
+        prompt: str
+        check: object
+        jira: bool = False
+
+    assert own(Old("n", "p", check_a)) == own(New("n", "p", check_a))
+
+
+def test_a_field_set_off_its_default_changes_own():
+    @dataclass
+    class New:
+        name: str
+        prompt: str
+        check: object
+        jira: bool = False
+
+    assert own(New("n", "p", check_a)) != own(New("n", "p", check_a, jira=True))
+
+
+def test_a_fields_field_at_its_default_still_enters_own():
+    @dataclass
+    class Old:
+        name: str
+        prompt: str
+        check: object
+
+    @dataclass
+    class New:
+        name: str
+        prompt: str
+        check: object
+        board: bool = True
+
+    assert own(Old("n", "p", check_a)) != own(New("n", "p", check_a))

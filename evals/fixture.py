@@ -18,10 +18,12 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from evals.board import BOARD_FILE, WEB, board_md, card, parse_board
+# jira_card is aliased: build() takes a flag of that name
+from evals.board import BOARD_FILE, JIRA_SITE, JIRA_WEB, WEB, board_md, card, parse_board, jira_card as jira_card_cell
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 BACKLOG_SCRIPT = Path(__file__).resolve().parents[1] / "plugins" / "xxthunder-dev-skills" / "scripts" / "backlog.py"
+JIRA_PLUGIN = FIXTURES / "jira-plugin"
 BRANCH = "develop"
 SEED_TAG = "eval-seed"
 IDENTITY = ("-c", "user.name=Eval", "-c", "user.email=eval@example.com")
@@ -43,6 +45,13 @@ INITIAL_NEXT = [card("DEMO-001", "Add retry to the sync job", "before the releas
 INITIAL_PROGRESS = [card("DEMO-006", "Cache the token"),           # title drifted from the item
                     card("DEMO-003", "Export to CSV"),
                     card("DEMO-005", "Drop the legacy importer")]  # item is Done
+
+# key: (summary, status); jira-plugin/scripts/issues.json holds the same
+JIRA_ISSUES = {
+    "OPS-041": ("Rotate the build agents' certificates", "Done"),
+    "OPS-042": ("Move the nightly build to the new runner", "To Do"),
+    "OPS-043": ("Split the deploy job | keep the old one as fallback", "To Do"),
+}
 
 CHECKOUT_RULE_RE = re.compile(
     r"The local checkout is\s+`~/dev/<org>/<repo>`.*?after the author agrees\.", re.S)
@@ -90,7 +99,7 @@ def write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
-def build(sandbox: Path, board_contract: bool = True) -> None:
+def build(sandbox: Path, board_contract: bool = True, jira_card: bool = False) -> None:
     remotes = sandbox / "remotes"
     remotes.mkdir(parents=True)
     for name in ("store", "demo"):
@@ -106,8 +115,11 @@ def build(sandbox: Path, board_contract: bool = True) -> None:
     write(store / "AGENTS.md", "# AGENTS.md\n\n" + "\n".join(sections))
     write(store / "engineering" / "repos.md",
           "# Repositories\n\n| Repo | Remote | IDs | What it is |\n|---|---|---|---|\n"
-          f"| [demo]({WEB}) | `{remotes / 'demo.git'}` | `DEMO-` | Demo service |\n")
-    write(store / BOARD_FILE, board_md(INITIAL_NEXT, INITIAL_PROGRESS))
+          f"| [demo]({WEB}) | `{remotes / 'demo.git'}` | `DEMO-` | Demo service |\n\n"
+          "| Jira project | Site | Key | What it is |\n|---|---|---|---|\n"
+          f"| [ops]({JIRA_WEB}) | {JIRA_SITE} | OPS | Ops team |\n")
+    seeded = INITIAL_NEXT + ([jira_card_cell("OPS-041", JIRA_ISSUES["OPS-041"][0])] if jira_card else [])
+    write(store / BOARD_FILE, board_md(seeded, INITIAL_PROGRESS))
     write(store / "engineering" / "log.md",
           "# Log\n\n## 2026-10-20\n- **started** · demo DEMO-003 · Export to CSV\n")
     commit_push(store, "init store")
