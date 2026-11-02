@@ -20,6 +20,7 @@ Why this repository looks the way it does. One decision per file, at
 | [0011](0011-backlog-ops-moves-the-card-on-a-configured-board.md) | `backlog-ops` moves the card on a configured board | Accepted | 2026-10-27 |
 | [0012](0012-skill-changes-are-verified-by-local-behavioural-evals.md) | Skill changes are verified by local behavioural evals | Accepted | 2026-10-27 |
 | [0013](0013-skill-work-builds-on-superpowers-and-skill-creator.md) | Skill work builds on superpowers and skill-creator | Accepted | 2026-10-31 |
+| [0014](0014-eval-results-count-per-plugin-and-case-version.md) | Eval results count per plugin version and case version | Accepted | 2026-11-02 |
 
 ---
 
