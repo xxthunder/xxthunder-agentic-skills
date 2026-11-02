@@ -32,6 +32,25 @@ def test_run_refuses_an_unknown_case(capsys):
     assert "unknown case: no-such-case" in capsys.readouterr().err
 
 
+def test_run_refuses_an_unknown_skill(capsys):
+    with pytest.raises(SystemExit):
+        main(["run", "--skill", "no-such-skill"])
+    assert "unknown skill: no-such-skill" in capsys.readouterr().err
+
+
+def test_run_skill_selects_that_skills_cases(tmp_path, no_agent):
+    assert main(["run", "--skill", "logbook", "--runs", "1", "--out", str(tmp_path)]) == 0
+    assert sorted(c for c, _, _ in no_agent["runs"]) == sorted(c.name for c in CASES if c.skill == "logbook")
+    assert no_agent["runs"]
+
+
+def test_list_prints_each_cases_skill(capsys):
+    main(["list"])
+    lines = capsys.readouterr().out.splitlines()
+    assert any(l.split()[:2] == ["logbook-started", "logbook"] for l in lines)
+    assert any(l.split()[:2] == ["rubric-flags-hand-allocation", "-"] for l in lines)
+
+
 def test_run_needs_claude_on_path(monkeypatch, capsys):
     monkeypatch.setattr("evals.__main__.shutil.which", lambda _: None)
     with pytest.raises(SystemExit):

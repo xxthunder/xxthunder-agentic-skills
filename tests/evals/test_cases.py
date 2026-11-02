@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import replace
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +13,8 @@ from evals.board import BOARD_FILE, card
 from evals.cases import CASES, RUBRIC, flagged
 from evals.fixture import INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, State, build, display_id
 
+REPO = Path(__file__).resolve().parents[2]
+SKILLS = REPO / "plugins/xxthunder-dev-skills/skills"
 LOG_FILE = "engineering/log.md"
 TODAY = date.today().isoformat()
 SEED_LOG = "# Log\n\n## 2026-10-20\n- **started** · demo DEMO-003 · Export to CSV\n"
@@ -169,6 +172,15 @@ def test_case_fails_on_the_untouched_sandbox(case):
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.name)
 def test_case_passes_on_its_expected_end_state(case):
     assert case.check(expected(case.name)) == []
+
+
+def test_every_case_names_an_existing_skill():
+    for c in CASES:
+        assert (c.skill is None and c.name.startswith("rubric-")) or (SKILLS / c.skill / "SKILL.md").is_file(), c.name
+
+
+def test_every_skill_has_a_case():
+    assert {d.name for d in SKILLS.iterdir() if d.is_dir()} <= {c.skill for c in CASES}
 
 
 def test_every_case_has_a_unique_name():

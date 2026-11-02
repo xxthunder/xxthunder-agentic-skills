@@ -1,4 +1,4 @@
-"""uv run --group dev python -m evals run --ref <git-ref> [--runs N] [--case NAME]... [-j N]
+"""uv run --group dev python -m evals run --ref <git-ref> [--runs N] [--case NAME]... [--skill NAME]... [-j N]
 uv run --group dev python -m evals report --ref <git-ref>
 uv run --group dev python -m evals list
 """
@@ -32,22 +32,27 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ref", default="HEAD", help="git ref whose plugin is evaluated (default HEAD)")
     ap.add_argument("--runs", type=int, default=3, help="runs per case (default 3)")
     ap.add_argument("--case", action="append", help="only this case; repeatable")
+    ap.add_argument("--skill", action="append", help="every case of this skill; repeatable, adds to --case")
     ap.add_argument("-j", "--jobs", type=int, default=4, help="parallel runs (default 4)")
     ap.add_argument("--out", help="results root (default <tmp>/xxthunder-evals)")
     a = ap.parse_args(argv)
 
     if a.cmd == "list":
         for c in CASES:
-            print(f"{c.name:24} {c.prompt}")
+            print(f"{c.name:34} {c.skill or '-':18} {c.prompt}")
         return 0
     out = results_dir(a.ref, a.out)
     if a.cmd == "run":
         unknown = set(a.case or []) - {c.name for c in CASES}
         if unknown:
             ap.error(f"unknown case: {', '.join(sorted(unknown))}")
+        unknown = set(a.skill or []) - {c.skill for c in CASES}
+        if unknown:
+            ap.error(f"unknown skill: {', '.join(sorted(unknown))}")
         if shutil.which("claude") is None:
             ap.error("`claude` is not on PATH")
-        cases = [c for c in CASES if not a.case or c.name in a.case]
+        chosen = bool(a.case or a.skill)
+        cases = [c for c in CASES if not chosen or c.name in (a.case or []) or c.skill in (a.skill or [])]
         for c in cases:
             for old in out.glob(f"{c.name}-*"):
                 remove_tree(old)
