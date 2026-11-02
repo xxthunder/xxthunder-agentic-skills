@@ -9,6 +9,8 @@ import re
 from itertools import zip_longest
 
 WEB = "https://example.com/team/demo"
+JIRA_SITE = "https://jira.example.com"
+JIRA_WEB = f"{JIRA_SITE}/projects/OPS"
 BOARD_FILE = "engineering/board.md"
 
 HEADER_RE = re.compile(r"^\|\s*Next\s*\|\s*In Progress\s*\|\s*$")
@@ -19,6 +21,12 @@ CARD_ID_RE = re.compile(r"\[([A-Z]+-\d{3}[a-z]?)\]")
 def card(item_id: str, title: str, reason: str = "") -> str:
     url = f"{WEB}/src/branch/develop/docs/backlog/{item_id.lower()}.md"
     return f"[{item_id}]({url}) · [demo]({WEB}) — {title}" + (f" · {reason}" if reason else "")
+
+
+def jira_card(key: str, summary: str, reason: str = "") -> str:
+    """The contract's Jira form: the key links to the issue, the project to its page."""
+    escaped = summary.replace("|", "\\|")
+    return f"[{key}]({JIRA_SITE}/browse/{key}) · [ops]({JIRA_WEB}) — {escaped}" + (f" · {reason}" if reason else "")
 
 
 def board_md(next_col: list[str], progress: list[str]) -> str:

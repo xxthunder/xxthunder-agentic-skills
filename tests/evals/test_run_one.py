@@ -100,3 +100,19 @@ def test_a_rerun_replaces_the_earlier_sandbox(tmp_path):
     run_one(case("report"), [], 1, tmp_path)
     item = tmp_path / "fake-1" / "checkouts" / "demo" / "docs" / "backlog" / "demo-007.md"
     assert "**Status**: Open" in item.read_text(encoding="utf-8")
+
+
+def test_run_one_loads_the_fake_jira_only_when_the_case_asks(tmp_path, monkeypatch):
+    from evals.fixture import JIRA_PLUGIN
+    seen = []
+    monkeypatch.setattr(runner, "claude_command",
+                        lambda prompt, dirs, sandbox: seen.append(list(dirs)) or [sys.executable, str(FAKE_AGENT), prompt])
+    run_one(case("report", jira=True), [], 1, tmp_path)
+    run_one(case("report"), [], 2, tmp_path)
+    assert seen == [[JIRA_PLUGIN], []]
+
+
+def test_run_one_seeds_the_jira_card_when_the_case_asks(tmp_path):
+    run_one(case("report", jira_card=True), [], 1, tmp_path)
+    board = (tmp_path / "fake-1" / "store" / "engineering" / "board.md").read_text(encoding="utf-8")
+    assert "OPS-041" in board
