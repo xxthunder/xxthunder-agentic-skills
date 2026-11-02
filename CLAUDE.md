@@ -21,8 +21,8 @@ Plugins version independently; a change in one plugin only bumps that plugin's v
 
 An item runs through the closed loop on this repository's gate and rubric:
 
-- **Gate**: `scripts/gate`, run on the host from the repository root. It comes with
-  [XAS-049](docs/backlog/xas-049.md); until it is there, the loop does not run here.
+- **Gate**: `scripts/gate`, run on the host from the repository root. It runs pytest and
+  checks the eval results the change asks for ([XAS-049](docs/backlog/xas-049.md)).
 - **Rubric**: [docs/rubric.md](docs/rubric.md), for what only a change to this repository
   needs.
 

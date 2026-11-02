@@ -92,6 +92,36 @@ case's fingerprint (its prompt, flags, check and setup, plus the shared code und
 `evals/` that git tracks). A rebase changes neither, so its results keep counting.
 Record the pass rates in the pull request.
 
+## The gate
+
+`scripts/gate` is the one definition of green before a push. It runs `pytest -q`, then
+checks the eval results. It never runs an eval itself. The change asks for results for:
+
+- every case of a skill whose folder the change touches, and
+- every case whose definition the change alters (a change to a helper under `evals/` that
+  the cases share alters all of them).
+
+Each such case needs 3 of 3 green results for the plugin as it is at the commit you push.
+A new or changed case of a touched skill must also have failed at least once at the
+merge-base with `origin/develop` (the RED step). If a result is missing, the gate prints
+`gate: red` and the exact command to run:
+
+```bash
+uv run --group dev python -m evals run --ref <sha> --case <name> ...
+```
+
+Run it, then push again. The decision behind these rules is
+[ADR-0014](docs/adr/0014-eval-results-count-per-plugin-and-case-version.md).
+
+Install the hook once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The `pre-push` hook calls `scripts/gate --pre-push`. To push anyway, use
+`git push --no-verify`.
+
 ## What this repository does not accept
 
 These pull requests are closed without a detailed review:
@@ -117,7 +147,7 @@ Then check:
 
 - [ ] The skill adds a capability, not documentation.
 - [ ] No hardcoded paths. Shell works on Windows and Linux.
-- [ ] `uv run --group dev pytest` passes.
+- [ ] `scripts/gate` exits 0.
 - [ ] A behaviour change in a skill has an eval case; its pass rates are in the pull request.
 - [ ] Versions bumped in `plugin.json` and `marketplace.json`.
 - [ ] Backlog item added or referenced.

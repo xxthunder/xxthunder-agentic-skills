@@ -1,0 +1,3 @@
+#!/bin/sh
+# Pre-push hook of XAS-049; git passes the pushed refs on stdin.
+exec "$(git rev-parse --show-toplevel)/scripts/gate" --pre-push

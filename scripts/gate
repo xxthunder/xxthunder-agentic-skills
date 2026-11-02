@@ -1,0 +1,4 @@
+#!/bin/sh
+# The push gate of XAS-049: pytest, then the eval results the change asks for.
+cd "$(dirname "$0")/.." || exit 1
+exec uv run --group dev python -m evals.gate "$@"

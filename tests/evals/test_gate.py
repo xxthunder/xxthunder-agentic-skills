@@ -342,3 +342,30 @@ def test_green_ends_with_green(stubbed, capsys):
     assert gate.main(["--head", "HEAD"]) == 0
     assert stubbed == ["HEAD"]
     assert capsys.readouterr().out.splitlines()[-1] == "gate: green"
+
+
+def test_gate_script_runs_the_gate_module():
+    text = (REPO_ROOT / "scripts" / "gate").read_text(encoding="utf-8")
+    assert text.startswith("#!/bin/sh\n")
+    assert "XAS-049" in text
+    assert 'exec uv run --group dev python -m evals.gate "$@"' in text
+
+
+def test_pre_push_hook_calls_the_gate():
+    text = (REPO_ROOT / ".githooks" / "pre-push").read_text(encoding="utf-8")
+    assert text.startswith("#!/bin/sh\n")
+    assert 'exec "$(git rev-parse --show-toplevel)/scripts/gate" --pre-push' in text
+
+
+def test_gate_files_are_executable_in_git():
+    out = git(REPO_ROOT, "ls-files", "-s", "scripts/gate", ".githooks/pre-push")
+    modes = [line.split()[0] for line in out.splitlines()]
+    assert modes == ["100755", "100755"]
+
+
+def test_gate_files_keep_lf_line_endings():
+    out = git(REPO_ROOT, "check-attr", "eol", "--", "scripts/gate", ".githooks/pre-push")
+    assert out.splitlines() == [
+        "scripts/gate: eol: lf",
+        ".githooks/pre-push: eol: lf",
+    ]
