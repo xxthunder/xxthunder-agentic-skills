@@ -29,10 +29,16 @@ def answer(sandbox: Path) -> dict:
     return json.loads((sandbox / "output.md").read_text(encoding="utf-8"))
 
 
+def test_the_result_carries_the_fingerprint_it_was_given(tmp_path):
+    run_one(case("report"), [], 1, tmp_path, "abc123")
+    written = json.loads((tmp_path / "fake-1" / "result.json").read_text(encoding="utf-8"))
+    assert written["fingerprint"] == "abc123"
+
+
 def test_a_run_records_stream_stderr_final_answer_and_result(tmp_path):
     result = run_one(case("report"), [], 1, tmp_path)
     sandbox = tmp_path / "fake-1"
-    assert result == {"case": "fake", "run": 1, "pass": True, "failures": []}
+    assert result == {"case": "fake", "run": 1, "pass": True, "failures": [], "fingerprint": ""}
     assert json.loads((sandbox / "result.json").read_text(encoding="utf-8")) == result
     assert '"type": "result"' in (sandbox / "stream.jsonl").read_text(encoding="utf-8")
     assert "a warning on stderr" in (sandbox / "stderr.txt").read_text(encoding="utf-8")

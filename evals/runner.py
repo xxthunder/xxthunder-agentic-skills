@@ -125,7 +125,7 @@ def parse_stream(stream: str) -> tuple[str, list[str], list[str]]:
     return (output if final is None else final), skills, commands
 
 
-def run_one(case: Case, plugin_dirs: list[Path], n: int, out: Path) -> dict:
+def run_one(case: Case, plugin_dirs: list[Path], n: int, out: Path, fp: str = "") -> dict:
     sandbox = out / f"{case.name}-{n}"
     remove_tree(sandbox)
     build(sandbox, case.board_contract)
@@ -148,7 +148,7 @@ def run_one(case: Case, plugin_dirs: list[Path], n: int, out: Path) -> dict:
         failures = case.check(snapshot(sandbox, output, skills, commands))
     except Exception as e:  # a broken end state is a failure, not a crash
         failures = [f"grading error: {e!r}"]
-    result = {"case": case.name, "run": n, "pass": not failures, "failures": failures}
+    result = {"case": case.name, "run": n, "pass": not failures, "failures": failures, "fingerprint": fp}
     (sandbox / "result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     return result
 
