@@ -437,6 +437,7 @@ def setup_rubric_scripted_allocation(demo: Path) -> None:
 @dataclass(frozen=True)
 class Case:
     name: str
+    skill: str | None             # plugin skill folder the case covers; None for the rubric cases
     prompt: str
     check: Callable[[State], list[str]]
     board: bool = True            # BOARD_* point at the sandbox store
@@ -447,58 +448,58 @@ class Case:
 
 
 CASES = [
-    Case("pull-from-next", "pull DEMO-001", check_pull_from_next),
-    Case("pull-new-card", "pull DEMO-007", check_pull_new_card),
-    Case("pull-substory", "pull DEMO-004a", check_pull_substory),
-    Case("close", "close DEMO-003", check_close),
-    Case("pull-no-board", "pull DEMO-007", check_pull_no_board, board=False),
-    Case("pull-board-unwritable", "pull DEMO-007", check_pull_board_unwritable, board_contract=False),
-    Case("next-show", "/next", check_show),
-    Case("next-put-after", "put DEMO-007 after DEMO-001", check_put_after),
-    Case("next-put-in-progress", "put DEMO-003 next", check_put_in_progress),
-    Case("next-drop", "drop DEMO-005 from the board", check_drop),
-    Case("next-only-logbook", "/next", check_only_logbook, board=False, logbook=True),
-    Case("logbook-done", "log that DEMO-003 is done: CSV export ships. Nothing outlives this repo.",
+    Case("pull-from-next", "backlog-ops", "pull DEMO-001", check_pull_from_next),
+    Case("pull-new-card", "backlog-ops", "pull DEMO-007", check_pull_new_card),
+    Case("pull-substory", "backlog-ops", "pull DEMO-004a", check_pull_substory),
+    Case("close", "backlog-ops", "close DEMO-003", check_close),
+    Case("pull-no-board", "backlog-ops", "pull DEMO-007", check_pull_no_board, board=False),
+    Case("pull-board-unwritable", "backlog-ops", "pull DEMO-007", check_pull_board_unwritable, board_contract=False),
+    Case("next-show", "next", "/next", check_show),
+    Case("next-put-after", "next", "put DEMO-007 after DEMO-001", check_put_after),
+    Case("next-put-in-progress", "next", "put DEMO-003 next", check_put_in_progress),
+    Case("next-drop", "next", "drop DEMO-005 from the board", check_drop),
+    Case("next-only-logbook", "next", "/next", check_only_logbook, board=False, logbook=True),
+    Case("logbook-done", "logbook", "log that DEMO-003 is done: CSV export ships. Nothing outlives this repo.",
          check_logbook_done, logbook=True),
-    Case("trigger-was-steht-an", "was steht an?", check_trigger_next),
-    Case("tick-ac", "tick AC 1 on DEMO-007", check_tick),
-    Case("logbook-started", "log that I started DEMO-007", check_logbook_started, logbook=True),
-    Case("logbook-note", 'note in the log for DEMO-006: "Waits for the token rotation." '
+    Case("trigger-was-steht-an", "next", "was steht an?", check_trigger_next),
+    Case("tick-ac", "backlog-ops", "tick AC 1 on DEMO-007", check_tick),
+    Case("logbook-started", "logbook", "log that I started DEMO-007", check_logbook_started, logbook=True),
+    Case("logbook-note", "logbook", 'note in the log for DEMO-006: "Waits for the token rotation." '
          "That wording is confirmed, write it.", check_logbook_note, logbook=True),
-    Case("logbook-note-unconfirmed", "note in the log that DEMO-006 waits for the token rotation",
+    Case("logbook-note-unconfirmed", "logbook", "note in the log that DEMO-006 waits for the token rotation",
          check_logbook_note_unconfirmed, logbook=True),
-    Case("logbook-started-again", "log that I started DEMO-003", check_logbook_duplicate, logbook=True),
-    Case("learnings-capture",
+    Case("logbook-started-again", "logbook", "log that I started DEMO-003", check_logbook_duplicate, logbook=True),
+    Case("learnings-capture", "learnings",
          "capture that, from DEMO-007. The claim, in my words: \"A health check that calls its dependencies "
          "turns one outage into many.\" It outlives this repo, no repo owns it, and knowing it would have "
          "saved me last week's incident.", check_capture, learnings=True),
-    Case("learnings-recall", "what do I know about git archive?", check_recall, learnings=True),
-    Case("design-record-adr",
+    Case("learnings-recall", "learnings", "what do I know about git archive?", check_recall, learnings=True),
+    Case("design-record-adr", "design-record",
          "record an ADR, it came out of DEMO-001 and we agreed on it: the sync job keeps its retry state in "
          "SQLite. Context: two concurrent runs corrupted the JSON state file twice. Redis lost because it "
          "adds a service to operate. A JSON file with a lock lost because the lock does not survive a crash. "
          "The cost we accept: a schema migration on every change of the state format.", check_adr),
-    Case("design-record-declines", "record an ADR: we renamed the local variable cnt to count in src/sync/",
+    Case("design-record-declines", "design-record", "record an ADR: we renamed the local variable cnt to count in src/sync/",
          check_adr_declined),
-    Case("design-record-asks", "record an ADR: we chose SQLite over Redis for the retry state",
+    Case("design-record-asks", "design-record", "record an ADR: we chose SQLite over Redis for the retry state",
          check_adr_asks),
-    Case("architecture-drift", "is the architecture doc still true?", check_drift),
-    Case("commit", "commit this", check_commit, setup=setup_feature_branch),
-    Case("refinement-bootstrap",
+    Case("architecture-drift", "architecture-scan", "is the architecture doc still true?", check_drift),
+    Case("commit", "commit-helper", "commit this", check_commit, setup=setup_feature_branch),
+    Case("refinement-bootstrap", "refinement",
          "let's refine. There is no backlog yet: put it in docs/backlog/ with the ID prefix SYNC, "
          "and I have no initial ideas.", check_bootstrap, setup=setup_greenfield),
-    Case("refinement-summary", "let's refine", check_refine_summary),
-    Case("refinement-new-item",
+    Case("refinement-summary", "refinement", "let's refine", check_refine_summary),
+    Case("refinement-new-item", "refinement",
          "create a new backlog item for this: the release process should be written down in RELEASE.md",
          check_new_item),
-    Case("refinement-new-item-de",
+    Case("refinement-new-item-de", "refinement",
          "Bitte einen neuen Backlog-Eintrag anlegen: der Release-Ablauf soll in RELEASE.md beschrieben werden",
          check_new_item),
-    Case("trigger-retrospective",
+    Case("trigger-retrospective", "retrospective",
          "That's wrong. I am not happy that you committed the backlog straight to develop.",
          check_trigger_retrospective),
-    Case("rubric-flags-hand-allocation", RUBRIC_PROMPT, check_rubric_flags_hand_allocation,
+    Case("rubric-flags-hand-allocation", None, RUBRIC_PROMPT, check_rubric_flags_hand_allocation,
          board=False, setup=setup_rubric_hand_allocation),
-    Case("rubric-passes-scripted-allocation", RUBRIC_PROMPT, check_rubric_passes_scripted_allocation,
+    Case("rubric-passes-scripted-allocation", None, RUBRIC_PROMPT, check_rubric_passes_scripted_allocation,
          board=False, setup=setup_rubric_scripted_allocation),
 ]

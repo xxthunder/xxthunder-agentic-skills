@@ -22,7 +22,7 @@ def fake_claude(monkeypatch):
 
 
 def case(prompt: str, check=lambda s: [], **kw) -> Case:
-    return Case("fake", prompt, check, **kw)
+    return Case("fake", None, prompt, check, **kw)
 
 
 def answer(sandbox: Path) -> dict:
