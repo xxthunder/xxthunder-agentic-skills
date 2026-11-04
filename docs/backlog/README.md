@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-064 — A pull of an item already In Progress still puts its card on the board](xas-064.md)
 - [XAS-063 — Loose ends of the XAS-049 gate](xas-063.md)
 - [XAS-062 — The gate takes over the rubric's mechanical checks](xas-062.md)
 - [XAS-061 — CI takes part in the gate](xas-061.md)
