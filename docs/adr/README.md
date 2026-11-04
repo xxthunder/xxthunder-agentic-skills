@@ -21,6 +21,7 @@ Why this repository looks the way it does. One decision per file, at
 | [0012](0012-skill-changes-are-verified-by-local-behavioural-evals.md) | Skill changes are verified by local behavioural evals | Accepted | 2026-10-27 |
 | [0013](0013-skill-work-builds-on-superpowers-and-skill-creator.md) | Skill work builds on superpowers and skill-creator | Accepted | 2026-10-31 |
 | [0014](0014-eval-results-count-per-plugin-and-case-version.md) | Eval results count per plugin version and case version | Accepted | 2026-11-02 |
+| [0015](0015-the-plugin-ships-no-jira-client.md) | The plugin ships no Jira client | Accepted | 2026-11-04 |
 
 ---
 
