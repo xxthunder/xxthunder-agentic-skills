@@ -17,8 +17,9 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
-from backlog import BacklogError, read_text, write_text
+from backlog import BacklogError, git, item_path, parse_item, read_text, remote_backlog, write_text
 
 COLUMNS = ["Next", "In Progress"]
 # The first two header cells of the registry tables we read: value is "is it the Jira table".
@@ -38,7 +39,8 @@ class RegistryEntry:
 
     name: str
     web: str
-    remote: str  # the Remote column of a repo, the Site column of a Jira project
+    remote: str  # the Remote column of a repo; empty for a Jira project
+    site: str  # the Site column of a Jira project (its base URL); empty for a repo
     jira: bool
 
 
@@ -80,7 +82,9 @@ def read_registry(path: Path) -> dict[str, RegistryEntry]:
         link = LINK_RE.match(cells[0])
         if link is None:
             continue
-        entries[link.group(1)] = RegistryEntry(link.group(1), link.group(2), cells[1].strip("`"), kind)
+        second = cells[1].strip("`")
+        entries[link.group(1)] = RegistryEntry(link.group(1), link.group(2), "" if kind else second,
+                                               second if kind else "", kind)
     return entries
 
 
@@ -159,6 +163,104 @@ def remove_card(board: Path, registry: Path, repo: str, item_id: str, verb: str)
     return out
 
 
+def escape(text: str) -> str:
+    """Text for a card: a pipe would split the cell."""
+    return text.replace("|", "\\|")
+
+
+def default_branch(repo: Path) -> str:
+    """The branch the item links point to: origin's default branch, else the current one."""
+    try:
+        return git(repo, "symbolic-ref", "--short", "refs/remotes/origin/HEAD").decode("utf-8").strip().removeprefix("origin/")
+    except BacklogError:
+        branch = git(repo, "branch", "--show-current").decode("utf-8").strip()
+        if not branch:
+            raise BacklogError(f"{repo}: detached HEAD and no origin/HEAD; cannot name a branch for the item link")
+        return branch
+
+
+def item_url(web: str, branch: str, item_id: str) -> str:
+    """Where the item file lives on the web, by the kind of forge the repo's web link names."""
+    parts = urlparse(web)
+    name = f"docs/backlog/{item_id.lower()}.md"
+    if parts.hostname == "github.com":
+        return f"{web}/blob/{branch}/{name}"
+    if re.search(r"/projects/[^/]+/repos/[^/]+", parts.path):
+        return f"{web}/browse/{name}"
+    return f"{web}/src/branch/{branch}/{name}"
+
+
+def card_reason(card: str, title: str) -> str:
+    """The reason as written on *card*, '' for none. *title* is the card's fresh title."""
+    head = CARD_HEAD_RE.match(card)
+    rest = card[head.end():] if head else ""
+    if not rest.startswith(TITLE_SEP):
+        return ""
+    rest = rest[len(TITLE_SEP):]
+    fresh = escape(title)
+    if rest == fresh:
+        return ""
+    if rest.startswith(fresh + REASON_SEP):
+        return rest[len(fresh) + len(REASON_SEP):]
+    return rest.rsplit(REASON_SEP, 1)[1] if REASON_SEP in rest else ""
+
+
+def read_item(directory: Path | None, checkout: Path | None, item_id: str) -> tuple[str, str]:
+    """(title, branch) of an item, read from a backlog directory or from a checkout's remote."""
+    if directory is not None:
+        return parse_item(item_path(directory, item_id)).title, default_branch(directory)
+    if checkout is not None:
+        with remote_backlog(checkout) as backlog:
+            title = parse_item(item_path(backlog, item_id)).title
+        return title, default_branch(checkout)
+    raise BacklogError("name the backlog with --dir or --repo")
+
+
+def put_card(board: Path, registry: Path, args: argparse.Namespace) -> list[str]:
+    """Place or move an item's card in Next. Returns stdout lines."""
+    entry = read_registry(registry).get(args.repo)
+    if entry is None:
+        raise BacklogError(f"{args.repo!r} is not in the registry {registry}")
+    if args.title is not None and not entry.jira:
+        raise BacklogError("--title is for the card of a Jira issue")
+    if args.at is not None and args.at < 1:
+        raise BacklogError("--at counts from 1")
+    if entry.jira or args.id.startswith("#"):
+        raise BacklogError(NOT_IMPLEMENTED.format("put of a Jira issue or an issue number"))
+    title, branch = read_item(args.dir, args.checkout, args.id)
+    text, crlf = read_text(board)
+    lines = text.split("\n")
+    table = find_table(lines)
+    columns = [list(column) for column in table.columns]
+    nxt = columns[0]
+    found = find_card(columns, args.id, args.repo)
+    if found and found[0] == 1:
+        raise BacklogError(f"{args.id} is in {COLUMNS[1]}; put would move work back to waiting")
+    reason = ""
+    if found:
+        reason = card_reason(nxt.pop(found[1]), title)
+    if args.reason is not None:
+        reason = escape(args.reason)
+    if args.after is not None:
+        after = find_card([nxt], args.after, args.repo)
+        if after is None:
+            raise BacklogError(f"{args.after} is not in {COLUMNS[0]}")
+        index = after[1] + 1
+    elif args.at is not None:
+        index = min(args.at - 1, len(nxt))
+    else:
+        index = 0
+    card = (f"[{args.id}]({item_url(entry.web, branch, args.id)}) · [{entry.name}]({entry.web})"
+            f"{TITLE_SEP}{escape(title)}" + (f"{REASON_SEP}{reason}" if reason else ""))
+    nxt.insert(index, card)
+    if columns == table.columns:
+        return [f"unchanged: {args.id} is already at position {index + 1} in {COLUMNS[0]}", f"title: {title}"]
+    lines[table.start:table.end] = render_rows(columns)
+    write_text(board, "\n".join(lines), crlf)
+    verb = "moved" if found else "placed"
+    return [f"changed: {verb} {args.id} to position {index + 1} in {COLUMNS[0]}", f"title: {title}"]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--board", type=Path, required=True, help="the board file")
@@ -196,7 +298,10 @@ def main(argv: list[str] | None = None) -> int:
         stream.reconfigure(encoding="utf-8")
     args = build_parser().parse_args(argv)
     try:
-        if args.command in ("drop", "close"):
+        if args.command == "put":
+            for line in put_card(args.board, args.registry, args):
+                print(line)
+        elif args.command in ("drop", "close"):
             verb = "dropped" if args.command == "drop" else "closed"
             for line in remove_card(args.board, args.registry, args.repo, args.id, verb):
                 print(line)
