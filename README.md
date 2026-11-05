@@ -29,6 +29,7 @@ Developer workflow skills:
 |---|---|
 | [**architecture-scan**](plugins/xxthunder-dev-skills/skills/architecture-scan/SKILL.md) | Read-only scan — derives real structure from the repo, proposes a bootstrap when `architecture.md` is absent, reports drift when it is not |
 | [**backlog-ops**](plugins/xxthunder-dev-skills/skills/backlog-ops/SKILL.md) | Lifecycle operations on backlog items — pull, tick acceptance/UAT criteria, close with epic-status cascade; moves the item's card on a configured board at pull and close — for a Jira issue on the board, the card only |
+| [**closed-loop**](plugins/xxthunder-dev-skills/skills/closed-loop/SKILL.md) | Drives one backlog item from the board to a pull request whose body is the evidence package — SDD for the work, the tester kept apart from the implementer, ended on the target repository's gate and never on a reviewer's approval |
 | [**commit-helper**](plugins/xxthunder-dev-skills/skills/commit-helper/SKILL.md) | Conventional commit creation with mandatory pre-commit checks |
 | [**design-record**](plugins/xxthunder-dev-skills/skills/design-record/SKILL.md) | Durable design record — drafts ADRs with numbering and a derived index, and edits the slotted `architecture.md` |
 | [**learnings**](plugins/xxthunder-dev-skills/skills/learnings/SKILL.md) | Captures what outlives a repository into the author's personal knowledge repo — configured on the machine, never named in any repo — and recalls it at the start of a topic |
@@ -127,6 +128,7 @@ Skills trigger automatically based on conversation context, or can be invoked ex
 **xxthunder-dev-skills**
 - [**architecture-scan**](plugins/xxthunder-dev-skills/skills/architecture-scan/SKILL.md): "check the docs against reality", "is the architecture doc still true", "bootstrap the architecture doc"
 - [**backlog-ops**](plugins/xxthunder-dev-skills/skills/backlog-ops/SKILL.md): "start XAS-025", "tick AC 2 on XAS-025", "close XAS-025"; "pull PROJ-123", "close PROJ-123" for a Jira issue whose card is on the board
+- [**closed-loop**](plugins/xxthunder-dev-skills/skills/closed-loop/SKILL.md): "put XAS-012 in the loop", "nimm XAS-012 in die Loop"; "Make it so!", "Energie!" for the item in focus
 - [**commit-helper**](plugins/xxthunder-dev-skills/skills/commit-helper/SKILL.md): triggered when creating commits
 - [**design-record**](plugins/xxthunder-dev-skills/skills/design-record/SKILL.md): "record an ADR", "document this decision", "update the architecture doc"
 - [**learnings**](plugins/xxthunder-dev-skills/skills/learnings/SKILL.md): "capture that", "that's a learning", "what do I know about X" — also proposed when the author corrects the agent
