@@ -9,6 +9,11 @@
 ## Table of Contents
 
 ### Open
+- [XAS-069 — The gate runs its tests without the push hook's git environment](xas-069.md)
+- [XAS-068 — An eval case for the closed loop's CI-as-gate path](xas-068.md)
+- [XAS-067 — Bitbucket Server and Jenkins host the closed loop's pull request and checks](xas-067.md)
+- [XAS-066 — A script finds a loop's state across worktrees on resume](xas-066.md)
+- [XAS-065 — An eval case for the plan step and the guard after N.b](xas-065.md)
 - [XAS-064 — A pull of an item already In Progress still puts its card on the board](xas-064.md)
 - [XAS-063 — Loose ends of the XAS-049 gate](xas-063.md)
 - [XAS-062 — The gate takes over the rubric's mechanical checks](xas-062.md)
