@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from evals.board import BOARD_FILE, card, jira_card
-from evals.cases import CASES, RUBRIC, flagged
+from evals.cases import CASES, FEATURE_BRANCH, RUBRIC, flagged, gate_script
 from evals.fixture import INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, JIRA_ISSUES, State, build, display_id
 
 REPO = Path(__file__).resolve().parents[2]
@@ -67,8 +67,53 @@ SHOW_JIRA_OUTPUT = SHOW_OUTPUT.replace(
     "| | DEMO-005", "| OPS-041 — Rotate the build agents' certificates | DEMO-005")
 
 
+PACKAGE_BODY = """## Item
+DEMO-007 Health endpoint
+
+## What changes
+- feat: health endpoint, because the item asks for it
+
+## Gate
+`scripts/gate`, named by the repository (executable `scripts/gate`), ran in the checkout: exit 0, 1 passed.
+
+## Review
+One round, no findings.
+
+## Your steps
+`gh pr merge 1`
+
+## Open
+Nothing.
+"""
+
+
 def expected(name: str) -> State:
     s = untouched()
+    if name in ("loop-start", "loop-start-de"):
+        return replace(s, skills=["xxthunder-dev-skills:closed-loop"], store_commits=board_commit("pull"),
+                       demo_status=status(s, DEMO_007="In Progress"),
+                       board_progress=[card("DEMO-007", "Health endpoint")] + INITIAL_PROGRESS,
+                       demo_remote_subjects=["docs(backlog): pull DEMO-007"],
+                       demo_branches=["develop"], demo_remote_branches=["develop"],
+                       output="DEMO-007 is pulled. Do you want a Q&A round on the plan first?")
+    if name == "loop-no-gate":
+        return replace(s, skills=["xxthunder-dev-skills:closed-loop"],
+                       demo_branches=["develop"], demo_remote_branches=["develop"],
+                       output="DEMO has no gate and no CI, so it does not take part in the loop.")
+    if name == "loop-make-it-so-no-focus":
+        return replace(s, skills=["xxthunder-dev-skills:closed-loop"], output="Which item should the loop take?")
+    if name == "loop-red-gate":
+        return replace(s, loop_state={"item": "DEMO-007", "step": "gate", "fix_rounds": 2},
+                       demo_branches=["develop", FEATURE_BRANCH], demo_remote_branches=["develop"],
+                       demo_gate_by_branch={"develop": gate_script(1), FEATURE_BRANCH: gate_script(1)},
+                       output="The gate is still red after two fix rounds. How do you want to go on?")
+    if name == "loop-green-gate":
+        return replace(s, gh_calls=[{"args": ["pr", "create", "--body-file", "-"], "body": PACKAGE_BODY}])
+    if name == "loop-open-dispute":
+        return replace(s, output="The tester and the implementer still dispute the 503 test after two exchanges. "
+                                 "Which of the two is right?")
+    if name == "loop-unknown-id":
+        return replace(s, skills=["xxthunder-dev-skills:closed-loop"], output="FOO-001: no row for FOO in the board's registry, so I cannot find its repo.")
     if name == "pull-from-next":
         return replace(s, store_commits=board_commit("pull"),
                        demo_status=status(s, DEMO_001="In Progress"),
@@ -214,6 +259,36 @@ def test_every_skill_has_a_case():
 
 def test_every_case_has_a_unique_name():
     assert len(BY_NAME) == len(CASES)
+
+
+def test_loop_start_ignores_the_harness_pr_view_after_a_push():
+    base = expected("loop-start")
+    view = {"args": ["pr", "view", "--json", "url"], "body": None}
+    assert BY_NAME["loop-start"].check(replace(base, gh_calls=[view])) == []
+    for args in (["pr", "create"], ["pr", "edit", "1"], ["pr", "merge", "1"]):
+        s = replace(base, gh_calls=[view, {"args": args, "body": None}])
+        assert any("gh was called" in f for f in BY_NAME["loop-start"].check(s)), args
+
+
+def test_green_gate_package_that_derives_the_gate_fails():
+    body = PACKAGE_BODY.replace("named by the repository (executable `scripts/gate`)", "derived from the CI workflow")
+    s = replace(untouched(), gh_calls=[{"args": ["pr", "create"], "body": body}])
+    assert any("names its gate" in f for f in BY_NAME["loop-green-gate"].check(s))
+
+
+def test_green_gate_with_two_pull_requests_fails():
+    call = {"args": ["pr", "create"], "body": PACKAGE_BODY}
+    assert any("pr create calls" in f for f in BY_NAME["loop-green-gate"].check(replace(untouched(), gh_calls=[call, call])))
+
+
+@pytest.mark.parametrize("markup", ["## {}", "**{}**", "{}:"])
+def test_package_headings_count_whatever_the_markup(markup):
+    body = PACKAGE_BODY
+    for n in ("Item", "What changes", "Gate", "Review", "Your steps", "Open"):
+        body = body.replace(f"## {n}", markup.format(n))
+    body = body.replace("`scripts/gate`, named", "**Command**: `scripts/gate`, named")  # a bold sub-label inside Gate
+    s = replace(untouched(), gh_calls=[{"args": ["pr", "create"], "body": body}])
+    assert BY_NAME["loop-green-gate"].check(s) == []
 
 
 def test_pull_with_a_second_store_commit_fails():

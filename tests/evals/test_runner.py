@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -65,7 +66,7 @@ def test_clean_env_drops_every_store_pair_and_the_parent_session(tmp_path):
             "LEARNINGS_PATH": "/k", "OTHER_PATH": "/o", "OTHER_REMOTE": "o", "BOARD_PATH": "/b",
             "CLAUDECODE": "1", "CLAUDE_CODE_ENTRYPOINT": "cli", "CLAUDE_CODE_OAUTH_TOKEN": "t"}
     env = clean_env(base, tmp_path, board=False, logbook=False)
-    assert env["PATH"] == "/bin" and env["LD_LIBRARY_PATH"] == "/lib"
+    assert env["PATH"].split(os.pathsep)[-1] == "/bin" and env["LD_LIBRARY_PATH"] == "/lib"
     assert env["CLAUDE_CODE_OAUTH_TOKEN"] == "t"
     for gone in ("LOGBOOK_PATH", "LOGBOOK_REMOTE", "LEARNINGS_PATH", "OTHER_PATH", "OTHER_REMOTE",
                  "BOARD_PATH", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"):
@@ -149,3 +150,19 @@ def test_remove_tree_of_a_missing_path_does_nothing(tmp_path):
     from evals.runner import remove_tree
 
     remove_tree(tmp_path / "never-built")
+
+
+def test_clean_env_puts_the_fake_gh_first_on_the_path_and_names_the_sandbox(tmp_path):
+    import os
+
+    from evals.fixture import FIXTURES
+
+    env = clean_env({"PATH": "/bin"}, tmp_path, board=True, logbook=False)
+    assert env["PATH"].split(os.pathsep) == [str(FIXTURES / "bin"), "/bin"]
+    assert env["EVAL_SANDBOX"] == str(tmp_path)
+
+
+def test_a_case_defaults_to_no_closed_loop_contract():
+    from evals.cases import CASES, Case
+
+    assert Case("x", None, "p", lambda s: []).closed_loop is False

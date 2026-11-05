@@ -11,6 +11,7 @@ checkout, after a case's own setup; the snapshot counts local commits from there
 """
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -26,6 +27,7 @@ BACKLOG_SCRIPT = Path(__file__).resolve().parents[1] / "plugins" / "xxthunder-de
 JIRA_PLUGIN = FIXTURES / "jira-plugin"
 BRANCH = "develop"
 SEED_TAG = "eval-seed"
+GH_CALLS = "gh-calls.jsonl"  # the fake gh in fixtures/bin appends here
 IDENTITY = ("-c", "user.name=Eval", "-c", "user.email=eval@example.com")
 
 # file id: (title, status, priority, every criterion ticked)
@@ -99,7 +101,8 @@ def write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
-def build(sandbox: Path, board_contract: bool = True, jira_card: bool = False) -> None:
+def build(sandbox: Path, board_contract: bool = True, jira_card: bool = False,
+          closed_loop: bool = False) -> None:
     remotes = sandbox / "remotes"
     remotes.mkdir(parents=True)
     for name in ("store", "demo"):
@@ -111,11 +114,13 @@ def build(sandbox: Path, board_contract: bool = True, jira_card: bool = False) -
                 for name in ("logbook-contract.md", "learnings-contract.md")]
     if board_contract:
         sections.append(sandbox_contract((FIXTURES / "board-contract.md").read_text(encoding="utf-8"), sandbox))
+    if closed_loop:
+        sections.append((FIXTURES / "closed-loop-contract.md").read_text(encoding="utf-8"))
     shutil.copytree(FIXTURES / "store", store, dirs_exist_ok=True)
     write(store / "AGENTS.md", "# AGENTS.md\n\n" + "\n".join(sections))
     write(store / "engineering" / "repos.md",
           "# Repositories\n\n| Repo | Remote | IDs | What it is |\n|---|---|---|---|\n"
-          f"| [demo]({WEB}) | `{remotes / 'demo.git'}` | `DEMO-` | Demo service |\n\n"
+          f"| [demo]({WEB}) | `{remotes / 'demo.git'}` | DEMO | Demo service |\n\n"
           "| Jira project | Site | Key | What it is |\n|---|---|---|---|\n"
           f"| [ops]({JIRA_WEB}) | {JIRA_SITE} | OPS | Ops team |\n")
     seeded = INITIAL_NEXT + ([jira_card_cell("OPS-041", JIRA_ISSUES["OPS-041"][0])] if jira_card else [])
@@ -179,6 +184,11 @@ class State:
     demo_files: dict[str, str] = field(default_factory=dict)     # working tree of the demo checkout
     store_files: dict[str, str] = field(default_factory=dict)    # the store's default branch on its remote
     commands: list[str] = field(default_factory=list)            # Bash commands the session ran, in order
+    gh_calls: list[dict] = field(default_factory=list)           # {"args", "body"} per fake `gh` call, in order
+    loop_state: dict = field(default_factory=dict)               # <git-dir>/closed-loop.json of the demo checkout
+    demo_branches: list[str] = field(default_factory=list)       # local branches of the demo checkout
+    demo_remote_branches: list[str] = field(default_factory=list)  # branches of the demo remote
+    demo_gate_by_branch: dict[str, str] = field(default_factory=dict)  # scripts/gate on each local branch that has one
 
 
 def snapshot(sandbox: Path, output: str, skills: list[str], commands: list[str] | None = None) -> State:
@@ -193,12 +203,29 @@ def snapshot(sandbox: Path, output: str, skills: list[str], commands: list[str] 
     for path in (demo / "docs" / "backlog").glob("demo-*.md"):
         m = re.search(r"^\*\*Status\*\*: (.+)$", path.read_text(encoding="utf-8"), re.M)
         status[display_id(path.stem)] = m.group(1) if m else ""
-    demo_log = git(sandbox / "remotes" / "demo.git", "log", "--format=%s", BRANCH).splitlines()
+    # pushed after the seed: what a case setup pushed before the seed tag is not the run's
+    git(demo, "fetch", "-q", "origin")  # a push from another clone or straight to the bare remote counts
+    demo_log = git(demo, "log", "--format=%s", f"{SEED_TAG}..origin/{BRANCH}").splitlines()
     local = git(demo, "log", "--format=%s", f"{SEED_TAG}..HEAD").splitlines()
+    calls = sandbox / GH_CALLS
+    gh_calls = ([json.loads(line) for line in calls.read_text(encoding="utf-8").splitlines()]
+                if calls.exists() else [])
+    state_file = Path(git(demo, "rev-parse", "--absolute-git-dir").strip()) / "closed-loop.json"
+    branches = git(demo, "branch", "--format=%(refname:short)").split()
+    gates = {}
+    for b in branches:
+        r = subprocess.run(["git", "show", f"{b}:scripts/gate"], cwd=demo, capture_output=True, text=True, encoding="utf-8")
+        if r.returncode == 0:
+            gates[b] = r.stdout
     return State(nxt, prog, commits[:-1], status, git(demo, "status", "--porcelain"),
-                 demo_log[:-1], output, skills,
+                 demo_log, output, skills,
                  demo_local_subjects=local,
                  demo_head_message=git(demo, "log", "-1", "--format=%B") if local else "",
                  demo_files=text_files(demo),
                  store_files=committed_files(store_bare),
-                 commands=list(commands or []))
+                 commands=list(commands or []),
+                 gh_calls=gh_calls,
+                 loop_state=(json.loads(state_file.read_text(encoding="utf-8")) if state_file.exists() else {}),
+                 demo_branches=branches,
+                 demo_remote_branches=git(sandbox / "remotes" / "demo.git", "branch", "--format=%(refname:short)").split(),
+                 demo_gate_by_branch=gates)

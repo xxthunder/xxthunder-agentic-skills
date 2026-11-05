@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""Fake `gh` for the eval sandbox: records each call, never touches a network.
+
+Each call becomes one JSON line {"args": [...], "body": <text or null>} in
+$EVAL_SANDBOX/gh-calls.jsonl. `pr create` prints a fixed URL; everything else is silent.
+"""
+import json
+import os
+import sys
+from pathlib import Path
+
+
+def body_of(args):
+    for i, arg in enumerate(args):
+        if arg.startswith("--body="):
+            return arg[len("--body="):]
+        if arg == "--body" and i + 1 < len(args):
+            return args[i + 1]
+        if arg.startswith("--body-file=") or (arg == "--body-file" and i + 1 < len(args)):
+            path = arg.partition("=")[2] if "=" in arg else args[i + 1]
+            if path == "-":
+                return sys.stdin.read()
+            return Path(path).read_text(encoding="utf-8")
+    return None
+
+
+def main(args):
+    call = {"args": args, "body": body_of(args)}
+    with open(Path(os.environ["EVAL_SANDBOX"]) / "gh-calls.jsonl", "a", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(call) + "\n")
+    if args[:2] == ["pr", "create"]:
+        print("https://example.com/demo/pull/1")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
