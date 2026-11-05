@@ -16,9 +16,11 @@
 #   store contract <STORE_DIR> <SECTION>
 #       Prints the section headed <SECTION> — at any heading level, through the
 #       line before the next heading of the same or a higher level — from the
-#       store's AGENTS.md or from any file it pulls in with an import line
-#       (`@path` alone on a line, relative to the importing file, followed
-#       recursively). Headings and import lines inside code fences do not count.
+#       store's AGENTS.md — or its CLAUDE.md where there is no AGENTS.md; an
+#       AGENTS.md without the section is never made up for by a CLAUDE.md —
+#       or from any file it pulls in with an import line (`@path` alone on a
+#       line, relative to the importing file, followed recursively). Headings
+#       and import lines inside code fences do not count.
 #       The contract is one section in one place: missing, found twice, or an
 #       import that names no file — says so on stderr, exits 1.
 #
@@ -153,13 +155,18 @@ absolute() {
 contract() {
     dir=$1
     section=$2
-    [ -f "$dir/AGENTS.md" ] ||
-        die 1 "no AGENTS.md in $dir — the store has to provide its contract there, in a section headed '$section'"
+    if [ -f "$dir/AGENTS.md" ]; then
+        entry=AGENTS.md
+    elif [ -f "$dir/CLAUDE.md" ]; then
+        entry=CLAUDE.md
+    else
+        die 1 "no AGENTS.md (or CLAUDE.md) in $dir — the store has to provide its contract there, in a section headed '$section'"
+    fi
     root=$(cd "$dir" && pwd)
     newline='
 '
     # Breadth-first over the import graph; `seen` stops a cycle.
-    pending="$root/AGENTS.md"
+    pending="$root/$entry"
     seen=""
     found=""
     while [ -n "$pending" ]; do
@@ -200,7 +207,7 @@ EOF
 
     found=${found#"$newline"}
     [ -n "$found" ] ||
-        die 1 "no section headed '$section' in $root/AGENTS.md or any file it imports — the store has to provide its contract there"
+        die 1 "no section headed '$section' in $root/$entry or any file it imports — the store has to provide its contract there"
     case "$found" in
         *"$newline"*)
             die 1 "the section headed '$section' is in more than one place — keep exactly one: $(printf '%s' "$found" | tr '\n' ' ')"

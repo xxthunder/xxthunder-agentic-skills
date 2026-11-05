@@ -510,3 +510,35 @@ def test_contract_matches_the_whole_heading_only(tmp_path, env):
     result = run_contract(store, "Logbook", env)
     assert result.returncode == 0, result.stderr
     assert result.stdout == "## Logbook\n\nNew.\n"
+
+
+# A repository that has no AGENTS.md keeps its instructions in CLAUDE.md. The
+# closed-loop skill reads a target repo's `Closed loop` section the same way.
+
+
+def test_contract_falls_back_to_claude_md(tmp_path, env):
+    store = tmp_path / "store"
+    write(store / "CLAUDE.md",
+          "# Repo\n\n## Closed loop\n\n- **Gate**: `make check`\n\n## Other\n\nUnrelated.\n")
+    result = run_contract(store, "Closed loop", env)
+    assert result.returncode == 0, result.stderr
+    assert "make check" in result.stdout
+    assert "## Other" not in result.stdout
+
+
+def test_contract_prefers_agents_md(tmp_path, env):
+    store = tmp_path / "store"
+    write(store / "AGENTS.md", "## Closed loop\n\n- **Gate**: `from agents`\n")
+    write(store / "CLAUDE.md", "## Closed loop\n\n- **Gate**: `from claude`\n")
+    result = run_contract(store, "Closed loop", env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "## Closed loop\n\n- **Gate**: `from agents`\n"
+
+
+def test_contract_crlf(tmp_path, env):
+    store = tmp_path / "store"
+    write(store / "CLAUDE.md",
+          "## Closed loop\r\n\r\n- **Gate**: `make check`\r\n\r\n## Other\r\n")
+    result = run_contract(store, "Closed loop", env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "## Closed loop\n\n- **Gate**: `make check`\n\n"
