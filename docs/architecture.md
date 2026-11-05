@@ -90,6 +90,10 @@ flowchart TB
         logb --> storesh
         refinement --> backpy["scripts/backlog.py"]
         backlog --> backpy
+        loop["closed-loop"] --> loopy["scripts/loop.py"]
+        loop --> storesh
+        loop --> backpy
+        loop -.superpowers: writing-plans, SDD.-> sdd["superpowers"]
         hook["hooks/session-start"]
     end
     subgraph paper["xxthunder-paperless-skills"]
@@ -99,10 +103,10 @@ flowchart TB
     end
 ```
 
-**`xxthunder-dev-skills`** — nine skills, all markdown, plus two pieces of
+**`xxthunder-dev-skills`** — ten skills, all markdown, plus three pieces of
 executable code: a `SessionStart` hook under `hooks/` (`hooks.json`, an
 extensionless `session-start`, and a polyglot `run-hook.cmd` that locates a
-bash on Windows), and two plugin-level scripts under `scripts/`.
+bash on Windows), and three plugin-level scripts under `scripts/`.
 
 `scripts/` is the plugin's place for executable helpers **shared by more than
 one skill**; a helper used by a single skill stays in that skill's own
@@ -110,10 +114,12 @@ directory, as the paperless plugin does. `store` is a POSIX sh script
 reached as `${CLAUDE_PLUGIN_ROOT}/scripts/store`: it
 resolves a cross-repo store from a variable pair (`<PREFIX>_PATH`,
 `<PREFIX>_REMOTE`), prints a contract section from the store's `AGENTS.md`
-or any file it pulls in with an `@path` import line (one section in one place,
-XAS-045), and commits-and-pushes into it, with one rebase retry.
-`learnings` calls it with the `LEARNINGS` prefix, `logbook` with `LOGBOOK`,
-`next` and `backlog-ops` with `BOARD`; the stores may be one repo or several. `backlog.py` is a PEP 723 Python script
+— or its `CLAUDE.md` where it has no `AGENTS.md` — or any file it pulls in with
+an `@path` import line (one section in one place, XAS-045), and
+commits-and-pushes into it, with one rebase retry. `learnings` calls it with
+the `LEARNINGS` prefix, `logbook` with `LOGBOOK`, `next`, `backlog-ops` and
+`closed-loop` with `BOARD`; `closed-loop` also reads a target repository's own
+`Closed loop` section with it. The stores may be one repo or several. `backlog.py` is a PEP 723 Python script
 run with `uv run`; `refinement` and `backlog-ops` call it for every mechanical
 backlog step — allocating an ID, setting a status with its epic cascade,
 regenerating the README table of contents from the item files (ADR-0009), and
@@ -122,7 +128,14 @@ prints an item's ID, status, priority and title — with `--repo`, for another
 repository, read at its remote's default branch without touching its working
 tree. `backlog-ops` calls `show --in-progress <ID>` before it makes a card on a
 pull: it prints only an item In Progress as work, epics and the standing
-refinement item left out, and its title is the card's. Mechanics with a right answer live in the scripts and
+refinement item left out, and its title is the card's. `loop.py` is the one
+script here that a single skill calls: `closed-loop` runs it, and the eval
+harness runs it too, to seed a loop's state for its cases. It reads rows of
+the registry's tables, turns a remote into its org and repo, finds the first
+file a contract names, keeps the loop's state in the worktree's git directory,
+guards that the implementer left the tester's files alone, and commits and
+folds the loop's commits with git's autosquash, the repository's hooks
+included (ADR-0016). Mechanics with a right answer live in the scripts and
 are tested; judgment — running a store's tests for a learning, drafting from
 its template, finding the right place for a log line, wording an item — stays
 in `SKILL.md`.
@@ -131,6 +144,10 @@ Four skills carry a `references/` file. Two of those are load-bearing beyond
 their own skill: `design-record`'s `adr-format.md` and `refinement`'s
 `backlog-format.md` state rules that other components read rather than restate,
 which is why a rule lives in exactly one of them.
+
+`closed-loop` conducts `superpowers:writing-plans` and
+`superpowers:subagent-driven-development` unchanged and takes the gate and the
+evidence package from the target repository's contract.
 
 `refinement` and `retrospective` are conversation skills; `backlog-ops` is
 mechanics-only; `design-record` is the sole writer of the record;
