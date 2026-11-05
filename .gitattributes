@@ -1,2 +1,3 @@
 scripts/gate text eol=lf
 .githooks/* text eol=lf
+evals/fixtures/bin/gh text eol=lf

@@ -89,6 +89,17 @@ def test_snapshot_sees_a_store_commit(tmp_path):
     assert ids(s.board_next) == ["DEMO-001", "DEMO-002"]
 
 
+def test_snapshot_sees_a_push_from_another_clone(tmp_path):
+    from evals.fixture import commit_push, git
+
+    build(tmp_path)
+    other = tmp_path / "other"
+    git(tmp_path, "clone", "-q", str(tmp_path / "remotes" / "demo.git"), str(other))
+    (other / "x.txt").write_text("x", encoding="utf-8")
+    commit_push(other, "docs: from elsewhere (DEMO-007)")
+    assert snapshot(tmp_path, "", []).demo_remote_subjects == ["docs: from elsewhere (DEMO-007)"]
+
+
 def test_build_seeds_the_adr_log_the_drifted_architecture_and_the_learnings(sandbox):
     s = snapshot(sandbox, "", [])
     assert "docs/adr/0001-the-sync-job-runs-from-cron.md" in s.demo_files
@@ -150,6 +161,11 @@ def test_registry_has_the_jira_projects_table(sandbox):
     assert "| [ops](https://jira.example.com/projects/OPS) | https://jira.example.com | OPS | Ops team |" in repos
 
 
+def test_registry_ids_cell_is_the_bare_prefix(sandbox):
+    repos = (sandbox / "store" / "engineering" / "repos.md").read_text(encoding="utf-8")
+    assert " | DEMO | Demo service |" in repos
+
+
 def test_build_with_jira_card_seeds_it_at_the_bottom_of_next(tmp_path):
     build(tmp_path / "with", jira_card=True)
     build(tmp_path / "without")
@@ -158,3 +174,198 @@ def test_build_with_jira_card_seeds_it_at_the_bottom_of_next(tmp_path):
     assert s.board_next == INITIAL_NEXT + [jira_card("OPS-041", summary)]
     assert s.board_progress == INITIAL_PROGRESS
     assert snapshot(tmp_path / "without", "", []).board_next == INITIAL_NEXT
+
+
+# --- XAS-055: fake gh, the Closed loop contract, loop setups ---
+
+def run_fake_gh(sandbox, *args, stdin=None):
+    """Run the fake `gh` the way the sandbox PATH would: as a Python script, `$EVAL_SANDBOX` set."""
+    import os
+    import subprocess
+    import sys
+
+    from evals.fixture import FIXTURES
+
+    env = {**os.environ, "EVAL_SANDBOX": str(sandbox)}
+    return subprocess.run([sys.executable, str(FIXTURES / "bin" / "gh"), *args],
+                          capture_output=True, text=True, encoding="utf-8", env=env, cwd=sandbox, input=stdin)
+
+
+def read_calls(sandbox):
+    import json
+
+    path = sandbox / "gh-calls.jsonl"
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def test_fake_gh_records_pr_create_and_prints_the_url(tmp_path):
+    r = run_fake_gh(tmp_path, "pr", "create", "--title", "t", "--body", "b")
+    assert r.returncode == 0
+    assert r.stdout.strip() == "https://example.com/demo/pull/1"
+    assert read_calls(tmp_path) == [{"args": ["pr", "create", "--title", "t", "--body", "b"], "body": "b"}]
+
+
+def test_fake_gh_reads_the_body_from_a_body_file(tmp_path):
+    (tmp_path / "pr.md").write_text("## Item\n\nDEMO-007\n", encoding="utf-8")
+    run_fake_gh(tmp_path, "pr", "create", "--title", "t", "--body-file", "pr.md")
+    assert read_calls(tmp_path)[0]["body"] == "## Item\n\nDEMO-007\n"
+
+
+def test_fake_gh_pr_checks_prints_nothing_and_each_call_is_one_more_line(tmp_path):
+    run_fake_gh(tmp_path, "pr", "create", "--title", "t", "--body", "b")
+    r = run_fake_gh(tmp_path, "pr", "checks", "1", "--watch")
+    assert (r.returncode, r.stdout) == (0, "")
+    calls = read_calls(tmp_path)
+    assert [c["args"][:2] for c in calls] == [["pr", "create"], ["pr", "checks"]]
+    assert calls[1]["body"] is None
+
+
+def test_fake_gh_ships_a_windows_wrapper():
+    from evals.fixture import FIXTURES
+
+    assert (FIXTURES / "bin" / "gh.cmd").is_file()
+
+
+def test_snapshot_returns_the_gh_calls(tmp_path):
+    build(tmp_path)
+    assert snapshot(tmp_path, "", []).gh_calls == []
+    run_fake_gh(tmp_path, "pr", "create", "--title", "t", "--body", "b")
+    assert snapshot(tmp_path, "", []).gh_calls == [
+        {"args": ["pr", "create", "--title", "t", "--body", "b"], "body": "b"}]
+
+
+def test_store_has_a_closed_loop_section_only_when_the_case_asks(tmp_path):
+    build(tmp_path / "with", closed_loop=True)
+    build(tmp_path / "without")
+    with_ = (tmp_path / "with" / "store" / "AGENTS.md").read_text(encoding="utf-8")
+    without = (tmp_path / "without" / "store" / "AGENTS.md").read_text(encoding="utf-8")
+    assert "## Closed loop" in with_ and "## Logbook" in with_
+    assert "## Closed loop" not in without
+
+
+def test_closed_loop_contract_carries_gate_order_package_sections_and_stop_rule():
+    from evals.fixture import FIXTURES
+
+    text = (FIXTURES / "closed-loop-contract.md").read_text(encoding="utf-8")
+    assert text.startswith("## Closed loop")
+    for needle in ("scripts/gate", "Evidence package", "No CI and no gate, no loop",
+                   "Item", "What changes", "Gate", "Review", "Your steps", "Open"):
+        assert needle in text, needle
+
+
+def setup_demo(tmp_path):
+    build(tmp_path)
+    return tmp_path / "checkouts" / "demo"
+
+
+def loop_state(demo):
+    import json
+    import subprocess
+    import sys
+
+    from evals.fixture import BACKLOG_SCRIPT
+
+    script = BACKLOG_SCRIPT.parent / "loop.py"
+    out = subprocess.run([sys.executable, str(script), "state", str(demo)],
+                         capture_output=True, text=True, check=True)
+    return json.loads(out.stdout)
+
+
+@pytest.mark.parametrize("gate_exit, marker", [(1, "FAILED tests/test_health.py::test_health"), (0, "1 passed")])
+def test_setup_loop_at_gate_cuts_the_branch_and_leaves_a_gate_and_state(tmp_path, gate_exit, marker):
+    import os
+    import subprocess
+    import sys
+
+    from evals.cases import setup_loop_at_gate
+    from evals.fixture import git, mark_seed
+
+    demo = setup_demo(tmp_path)
+    setup_loop_at_gate(demo, gate_exit)
+    mark_seed(tmp_path)
+    assert git(demo, "branch", "--show-current").strip() == "feature/DEMO-007-health-endpoint"
+    assert loop_state(demo) == {"item": "DEMO-007", "step": "gate", "fix_rounds": 0}
+    gate = demo / "scripts" / "gate"
+    assert marker in gate.read_text(encoding="utf-8")
+    assert git(demo, "status", "--porcelain") == ""
+    if sys.platform != "win32":
+        assert os.access(gate, os.X_OK)
+        r = subprocess.run([str(gate)], cwd=demo, capture_output=True, text=True)
+        assert r.returncode == gate_exit and marker in r.stdout
+
+
+def test_setup_loop_at_gate_keeps_the_gate_out_of_the_branch_diff(tmp_path):
+    from evals.cases import setup_loop_at_gate
+    from evals.fixture import git
+
+    demo = setup_demo(tmp_path)
+    setup_loop_at_gate(demo, 1)
+    assert "scripts/gate" in git(demo, "ls-tree", "-r", "--name-only", "develop")
+    changed = git(demo, "diff", "--name-only", "develop...HEAD").splitlines()
+    assert changed and "scripts/gate" not in changed
+    assert len(git(demo, "log", "--format=%s", "develop..HEAD").splitlines()) == 1
+
+
+def test_setup_loop_dispute_writes_the_dispute_state(tmp_path):
+    from evals.cases import setup_loop_dispute
+
+    demo = setup_demo(tmp_path)
+    setup_loop_dispute(demo)
+    state = loop_state(demo)
+    assert {k: state[k] for k in ("item", "step", "task", "exchanges")} == {
+        "item": "DEMO-007", "step": "dispute", "task": "1.b", "exchanges": 2}
+    assert isinstance(state["dispute"], str) and state["dispute"]
+
+
+def test_fake_gh_takes_the_body_from_stdin_with_body_file_dash(tmp_path):
+    run_fake_gh(tmp_path, "pr", "create", "--title", "t", "--body-file", "-", stdin="## Item\n\nfrom stdin\n")
+    call = read_calls(tmp_path)[0]
+    assert call["body"] == "## Item\n\nfrom stdin\n"
+    assert call["args"] == ["pr", "create", "--title", "t", "--body-file", "-"]
+
+
+def test_fake_gh_takes_the_body_in_the_equals_form(tmp_path):
+    run_fake_gh(tmp_path, "pr", "create", "--title=t", "--body=b c")
+    assert read_calls(tmp_path)[0]["body"] == "b c"
+
+
+def test_fake_gh_records_an_unknown_subcommand_and_stays_silent(tmp_path):
+    r = run_fake_gh(tmp_path, "pr", "view", "1")
+    assert (r.returncode, r.stdout) == (0, "")
+    assert read_calls(tmp_path) == [{"args": ["pr", "view", "1"], "body": None}]
+
+
+def test_fake_gh_is_an_executable_script_with_a_shebang():
+    import os
+    import sys
+
+    from evals.fixture import FIXTURES
+
+    if sys.platform == "win32":
+        pytest.skip("POSIX exec bit and shebang")
+    gh = FIXTURES / "bin" / "gh"
+    assert os.access(gh, os.X_OK)
+    assert gh.read_text(encoding="utf-8").startswith("#!")
+
+
+def test_gh_by_name_resolves_through_the_sandbox_path(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    from evals.runner import clean_env
+
+    if sys.platform == "win32":
+        pytest.skip("POSIX PATH lookup without a shell")
+    env = clean_env(dict(os.environ), tmp_path, board=True, logbook=False)
+    r = subprocess.run(["gh", "pr", "create", "--title", "t", "--body", "b"],
+                       env=env, capture_output=True, text=True, cwd=tmp_path)
+    assert r.returncode == 0 and r.stdout.strip() == "https://example.com/demo/pull/1"
+    assert read_calls(tmp_path) == [{"args": ["pr", "create", "--title", "t", "--body", "b"], "body": "b"}]
+
+
+def test_gh_cmd_runs_python_on_the_gh_script_and_forwards_arguments():
+    from evals.fixture import FIXTURES
+
+    text = (FIXTURES / "bin" / "gh.cmd").read_text(encoding="utf-8")
+    assert "python" in text.lower() and "gh" in text and "%*" in text

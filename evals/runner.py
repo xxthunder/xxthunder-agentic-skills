@@ -17,7 +17,7 @@ import tempfile
 from pathlib import Path
 
 from evals.cases import Case
-from evals.fixture import JIRA_PLUGIN, build, mark_seed, snapshot
+from evals.fixture import FIXTURES, JIRA_PLUGIN, build, mark_seed, snapshot
 
 PLUGIN = "plugins/xxthunder-dev-skills"
 STORE_PREFIXES = ("BOARD", "LOGBOOK", "LEARNINGS")
@@ -83,6 +83,8 @@ def clean_env(base: dict[str, str], sandbox: Path, board: bool, logbook: bool,
     env = {k: v for k, v in base.items()
            if k not in PARENT_SESSION and not any(k in (f"{p}_PATH", f"{p}_REMOTE") for p in pairs)}
     env["XDG_CACHE_HOME"] = str(sandbox / "cache")
+    env["EVAL_SANDBOX"] = str(sandbox)  # where the fake gh records its calls
+    env["PATH"] = os.pathsep.join([str(FIXTURES / "bin"), *filter(None, [env.get("PATH")])])
     for prefix, wanted in (("BOARD", board), ("LOGBOOK", logbook), ("LEARNINGS", learnings)):
         if wanted:
             env[f"{prefix}_PATH"] = str(sandbox / "store")
@@ -128,7 +130,7 @@ def parse_stream(stream: str) -> tuple[str, list[str], list[str]]:
 def run_one(case: Case, plugin_dirs: list[Path], n: int, out: Path, fp: str = "") -> dict:
     sandbox = out / f"{case.name}-{n}"
     remove_tree(sandbox)
-    build(sandbox, case.board_contract, case.jira_card)
+    build(sandbox, case.board_contract, case.jira_card, case.closed_loop)
     plugin_dirs = plugin_dirs + [JIRA_PLUGIN] if case.jira else plugin_dirs
     if case.setup:
         case.setup(sandbox / "checkouts" / "demo")

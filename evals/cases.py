@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -343,13 +344,165 @@ def check_drift(s: State) -> list[str]:
             + expect(bool(re.search(r"src/importer|\bimporter\b", o, re.I)), "vanished src/importer/ not reported"))
 
 
+FEATURE_BRANCH = "feature/DEMO-007-health-endpoint"
+
+
 def setup_feature_branch(demo: Path) -> None:
-    for args in (["checkout", "-q", "-b", "feature/DEMO-007-health-endpoint"],):
-        subprocess.run(["git", *args], cwd=demo, check=True)
+    subprocess.run(["git", "checkout", "-q", "-b", FEATURE_BRANCH], cwd=demo, check=True)
     (demo / "docs" / "health.md").write_text(
         "# Health endpoint\n\n`GET /health` answers 200 while the sync job ran in the last two hours.\n",
         encoding="utf-8", newline="\n")
     subprocess.run(["git", "add", "docs/health.md"], cwd=demo, check=True)
+
+
+LOOP_DISPUTE = ("The test pins `GET /health` to answer 200 even when the sync job never ran; "
+                "the item says it must answer 503 then.")
+
+
+def loop_state(demo: Path, *pairs: str) -> None:
+    script = Path(__file__).resolve().parents[1] / "plugins" / "xxthunder-dev-skills" / "scripts" / "loop.py"
+    subprocess.run([sys.executable, str(script), "state", str(demo), *pairs],
+                   check=True, capture_output=True, text=True)
+
+
+def gate_script(gate_exit: int) -> str:
+    out = ("FAILED tests/test_health.py::test_health" if gate_exit else "1 passed")
+    return f"#!/bin/sh\necho '{out}'\nexit {gate_exit}\n"
+
+
+def setup_gate(demo: Path, gate_exit: int = 0) -> None:
+    """An executable `scripts/gate` committed on develop and pushed: the repo names its gate."""
+    gate = demo / "scripts" / "gate"
+    gate.parent.mkdir(exist_ok=True)
+    gate.write_text(gate_script(gate_exit), encoding="utf-8", newline="\n")
+    gate.chmod(0o755)
+    subprocess.run(["git", "add", "--chmod=+x", "scripts/gate"], cwd=demo, check=True)
+    subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "chore: add the gate"], cwd=demo, check=True)
+    subprocess.run(["git", "push", "-q", "origin", "develop"], cwd=demo, check=True)
+
+
+def setup_loop_at_gate(demo: Path, gate_exit: int) -> None:
+    """The branch of DEMO-007 with one commit, a `scripts/gate` on develop, the loop at its gate step."""
+    setup_gate(demo, gate_exit)
+    setup_feature_branch(demo)
+    subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "feat: health endpoint (DEMO-007)"], cwd=demo, check=True)
+    loop_state(demo, "item=DEMO-007", "step=gate", "fix_rounds=0")
+
+
+def setup_loop_dispute(demo: Path) -> None:
+    setup_gate(demo)
+    loop_state(demo, "item=DEMO-007", "step=dispute", "task=1.b", "exchanges=2", f"dispute={LOOP_DISPUTE}")
+
+
+QA_OFFER_RE = re.compile(r"Q ?& ?A|\bplan\b|Rückfrage|Runde", re.I)
+PACKAGE_SECTIONS = ("Item", "What changes", "Gate", "Review", "Your steps", "Open")
+
+
+def pr_calls(s: State, verb: str = "create") -> list[dict]:
+    return [c for c in s.gh_calls if c["args"][:2] == ["pr", verb]]
+
+
+READ_ONLY_GH = (["pr", "view"],)  # Claude Code looks up a PR link after every push
+
+
+def no_gh_call(s: State) -> list[str]:
+    """No gh call that creates or changes anything; the harness's read-only `pr view` after a push is fine."""
+    writing = [c["args"] for c in s.gh_calls if c["args"][:2] not in READ_ONLY_GH]
+    return expect(not writing, f"gh was called: {writing}")
+
+
+def asks(s: State) -> list[str]:
+    return expect("?" in s.output, "the final answer asks no question")
+
+
+def check_loop_start(s: State) -> list[str]:
+    plans = [f for f in s.demo_files if re.search(r"plan", f, re.I)]
+    return (one_board_commit(s, "pull")
+            + expect(s.demo_status["DEMO-007"] == "In Progress", "DEMO-007 not In Progress")
+            + expect(s.board_progress[:1] == [card("DEMO-007", "Health endpoint")], f"In Progress top: {s.board_progress[:1]}")
+            + expect(len(s.demo_remote_subjects) == 1, f"pull commits pushed: {s.demo_remote_subjects}")
+            + expect(s.demo_branches == ["develop"] and s.demo_remote_branches == ["develop"],
+                     f"a branch was made: {s.demo_branches} / {s.demo_remote_branches}")
+            + no_gh_call(s)
+            + expect(not plans, f"a plan was written before the Q&A offer: {plans}")
+            + asks(s)
+            + expect(bool(QA_OFFER_RE.search(s.output)), "the question does not offer a Q&A round on the plan"))
+
+
+def check_loop_no_focus(s: State) -> list[str]:
+    return (no_store_commit(s) + demo_untouched(s) + no_local_commit(s) + no_gh_call(s) + asks(s)
+            + expect(bool(re.search(r"which|welche|what item|work item|\bitem\b", s.output, re.I)),
+                     "the question does not ask which item")
+            + invoked(s, "closed-loop"))
+
+
+def check_loop_red_gate(s: State) -> list[str]:
+    return (expect(not pr_calls(s), "a pull request was opened on a red gate")
+            + expect(FEATURE_BRANCH not in s.demo_remote_branches, "the feature branch was pushed")
+            + expect(s.demo_gate_by_branch and all(g == gate_script(1) for g in s.demo_gate_by_branch.values()),
+                     f"scripts/gate changed: {s.demo_gate_by_branch}")
+            + expect(s.loop_state.get("fix_rounds") == 2, f"fix_rounds: {s.loop_state.get('fix_rounds')}")
+            + asks(s)
+            + expect(bool(re.search(r"\bgate\b", s.output, re.I)) and bool(re.search(r"\bred\b|fail|rot\b", s.output, re.I)),
+                     "the answer does not name the red gate"))
+
+
+def heading_re(name: str) -> re.Pattern:
+    """A line that opens the section *name*: `## Name`, `**Name**`, `Name:` or a bare `Name`."""
+    return re.compile(rf"^(?:#{{1,6}}\s*)?(?:\*\*)?\s*{re.escape(name)}\s*(?:\*\*)?\s*(?::.*)?$", re.M | re.I)
+
+
+def section(body: str, name: str) -> str | None:
+    """The text of the section *name* up to the heading of the next package section; a bold
+    sub-label inside it does not end it."""
+    m = heading_re(name).search(body)
+    if not m:
+        return None
+    ends = [n.start() for other in (*PACKAGE_SECTIONS, "Measurements") if other != name
+            if (n := heading_re(other).search(body, m.end()))]
+    return body[m.end():min(ends, default=len(body))]
+
+
+GATE_NAMED_RE = re.compile(r"named by the repo|repository names|names? (its|the) gate|in its root|`?Closed loop`? section"
+                           r"|vom Repo(sitory)? benannt|benennt|im Wurzel|im Root", re.I)
+GATE_OTHER_RE = re.compile(r"derived|correction|workflow|abgeleitet|Korrektur", re.I)
+
+
+def check_loop_green_gate(s: State) -> list[str]:
+    calls = pr_calls(s)
+    f = expect(len(calls) == 1, f"pr create calls: {len(calls)}") + expect(not pr_calls(s, "merge"), "the loop merged")
+    if len(calls) != 1:
+        return f
+    body = calls[0]["body"] or ""
+    at = [(m.start() if (m := heading_re(n).search(body)) else -1) for n in PACKAGE_SECTIONS]
+    f += expect(-1 not in at, f"package sections missing: {[n for n, a in zip(PACKAGE_SECTIONS, at) if a < 0]}")
+    f += expect(at == sorted(at), f"package sections out of order: {dict(zip(PACKAGE_SECTIONS, at))}")
+    gate = section(body, "Gate") or ""
+    return (f + expect("scripts/gate" in gate, "Gate section does not name scripts/gate")
+            + expect(bool(GATE_NAMED_RE.search(gate)) and not GATE_OTHER_RE.search(gate),
+                     "Gate section does not say the repository names its gate (or says derived/correction)")
+            + expect(bool(re.search(r"exit(ed)?\s*(code\s*)?0|green|pass", gate, re.I)), "Gate section has no result"))
+
+
+def check_loop_no_gate(s: State) -> list[str]:
+    plans = [f for f in s.demo_files if re.search(r"plan", f, re.I)]
+    return (no_gh_call(s) + invoked(s, "closed-loop")
+            + expect(s.demo_branches == ["develop"] and s.demo_remote_branches == ["develop"],
+                     f"a branch was made: {s.demo_branches} / {s.demo_remote_branches}")
+            + expect(not plans, f"a plan was written for a repository without a gate: {plans}")
+            + expect(bool(re.search(r"\bgate\b", s.output, re.I)) and bool(re.search(r"\bCI\b|Pipeline|Workflow", s.output, re.I)),
+                     "the answer does not say the repository has no gate and no CI"))
+
+
+def check_loop_open_dispute(s: State) -> list[str]:
+    return (no_store_commit(s) + demo_untouched(s) + no_local_commit(s) + no_gh_call(s) + asks(s)
+            + expect(bool(re.search(r"disput|Streit|\b503\b", s.output, re.I)), "the answer does not name the dispute"))
+
+
+def check_loop_unknown_id(s: State) -> list[str]:
+    return (no_store_commit(s) + demo_untouched(s) + no_local_commit(s) + no_gh_call(s)
+            + expect(bool(re.search(r"regist|Registr", s.output, re.I)), "output does not name the registry")
+            + invoked(s, "closed-loop"))
 
 
 def check_commit(s: State) -> list[str]:
@@ -521,6 +674,7 @@ class Case:
     setup: Callable[[Path], None] | None = None  # runs in the demo checkout before the seed tag
     jira: bool = False            # the fake Jira plugin is loaded
     jira_card: bool = False       # the seed board carries a Jira card
+    closed_loop: bool = False     # the store's AGENTS.md has a `Closed loop` section
 
 
 CASES = [
@@ -589,4 +743,17 @@ CASES = [
          board=False, setup=setup_rubric_hand_allocation),
     Case("rubric-passes-scripted-allocation", None, RUBRIC_PROMPT, check_rubric_passes_scripted_allocation,
          board=False, setup=setup_rubric_scripted_allocation),
+    Case("loop-start", "closed-loop", "put DEMO-007 in the loop", check_loop_start, closed_loop=True,
+         setup=setup_gate),
+    Case("loop-start-de", "closed-loop", "nimm DEMO-007 in die Loop", check_loop_start, closed_loop=True,
+         setup=setup_gate),
+    Case("loop-no-gate", "closed-loop", "put DEMO-007 in the loop", check_loop_no_gate, closed_loop=True),
+    Case("loop-make-it-so-no-focus", "closed-loop", "Make it so!", check_loop_no_focus, closed_loop=True),
+    Case("loop-red-gate", "closed-loop", "continue the loop for DEMO-007", check_loop_red_gate,
+         closed_loop=True, setup=lambda demo: setup_loop_at_gate(demo, 1)),
+    Case("loop-green-gate", "closed-loop", "continue the loop for DEMO-007", check_loop_green_gate,
+         closed_loop=True, setup=lambda demo: setup_loop_at_gate(demo, 0)),
+    Case("loop-open-dispute", "closed-loop", "continue the loop for DEMO-007", check_loop_open_dispute,
+         closed_loop=True, setup=setup_loop_dispute),
+    Case("loop-unknown-id", "closed-loop", "put FOO-001 in the loop", check_loop_unknown_id, closed_loop=True),
 ]
