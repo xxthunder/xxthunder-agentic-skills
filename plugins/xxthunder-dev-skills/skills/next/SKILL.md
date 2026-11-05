@@ -1,7 +1,7 @@
 ---
 name: next
 description: "Show the author's Kanban board — what is in progress and what comes next across all of the author's repositories — from one board file in the author's personal store, with each card's status and priority read fresh from its own backlog. Also places a card on the board or drops one. Use on '/next', 'what's next', 'was steht an' — when asked about the work backlog across repos, not about plans in general; and on 'put HSH-089 next', 'put X after Y', 'drop X from the board'. Never writes into the current repository; the store is configured on the machine and never named in any repo."
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/store *), Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/store *), Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *), Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/board.py *)
 ---
 
 <!-- Source: https://github.com/xxthunder/xxthunder-agentic-skills/tree/develop/plugins/xxthunder-dev-skills/skills/next -->
@@ -62,16 +62,17 @@ import line. Get it with the script, which follows the imports:
 
 Follow what it prints. It names:
 
-- where the board is, its columns, and the order within each column
-- the card format, and how a card's link is built
+- where the board file is, and the registry of repos and Jira projects
 - which moves there are, and what a card never holds
 - how a repo name resolves to its remote and to its local checkout
 - the language, and the commit subject of a change
 
-This skill ships **no board format, no path and no language of its own**. If
-the script exits non-zero — the section is missing or in more than one place —
-or the section names none of the items above, stop and say what
-the store has to provide — do not improvise.
+The board's **format** — columns, card, escaping, links — is the plugin's
+board script's (ADR-0017 of this plugin's home repository): `put` and `drop`
+call it, and it writes the board. This skill ships **no path and no language
+of its own**. If the script exits non-zero — the section is missing or in more
+than one place — or the section names none of the items above, stop and say
+what the store has to provide — do not improvise.
 
 ## Step 3: Read the items — fetched, never pulled
 
@@ -106,7 +107,7 @@ shown as written, with no status.
 ## `show`
 
 Resolve, read the contract, read the items. Then print the board as **one**
-table with the board's own header row — the contract's columns side by side,
+table with the board's own header row — the board's columns side by side,
 never one table per column — in the board's order. Each card is one cell: its
 address, its title and its reason as the board has them, plus status and
 priority read from its item.
@@ -130,33 +131,52 @@ No contradictions → say so in one line. `show` never changes anything.
 ## `put`
 
 1. Resolve and read the contract.
-2. The item must exist: read it as in Step 3, with its ID after `show`. No
-   item → say so and stop.
-3. A card for it in the in-progress column → `put` would move work back to
-   waiting, a reverse transition: say so and stop.
-4. Already in the waiting column → move it; otherwise make its card, with the
-   title read from the item and the link the contract describes. Where: "next"
-   or no position is the top — the item that comes next; "after X" directly
-   below X; "at n" at position n.
-5. Write the board in the contract's format, keeping every other card exactly
-   as it was. Write a reason only if the author gave one; ask for one only if
-   the contract requires it.
-6. Commit and push that file alone with the contract's subject:
+2. For an item ID, find its repo's checkout as in Step 3, item 1. An issue
+   `#<n>` and a Jira key need none.
+3. Put the card with the board script — the board file and the registry as
+   the contract names them, inside the store:
+   ```bash
+   uv run "${CLAUDE_PLUGIN_ROOT}/scripts/board.py" --board "<store>/<board file>" \
+     --registry "<store>/<registry file>" put <repo> <id> --repo <checkout> [--at <n> | --after <ID>] [--reason "<reason>"]
+   ```
+   "next" or no position is the top — leave out `--at` and `--after`; "after
+   X" is `--after X`; "at n" is `--at n`. Pass `--reason` only if the author
+   gave one; ask for one only if the contract requires it. The script reads
+   the title fresh from the item at the remote's default branch, refuses an
+   unknown item and a card in the in-progress column, keeps a moved card's
+   reason, and leaves every other card as it was.
+
+   **A Jira key** (like an issue `#<n>`) goes without `--repo`. Its card already on the board moves
+   as written. A key without a card makes the script refuse with
+   `board: <KEY> has no card: give its summary with --title`: only then read
+   the issue's summary through the session's own Jira access, and run the
+   same call once more with `--title "<summary>"`. No Jira access, or no such
+   issue → say so and stop: no card.
+4. Read its output. Exit 1 prints one line `board: …` — show it and stop;
+   the board is untouched. `unchanged: …` → nothing to commit; say why, in
+   the script's words. `changed: …` → commit and push the board file alone
+   with the contract's subject, the `title:` line where the subject needs the
+   title:
    ```bash
    "${CLAUDE_PLUGIN_ROOT}/scripts/store" commit-push "<store>" "<subject>" <board-file>
    ```
    A conflict is reported and the operation stops; never resolve conflicts
    in the store.
-7. Show the board as it now stands, without fetching again.
+5. Show the board as it now stands, without fetching again.
 
 ## `drop`
 
 1. Resolve and read the contract.
-2. Not on the board → say so and stop.
-3. Remove the card from its column, keeping every other card exactly as it
-   was, in the layout the contract names; commit and push as in `put`. A
-   reason is the author's if they gave one; never ask for one — without it,
-   the subject takes what the contract names for that case.
+2. Drop the card with the board script:
+   ```bash
+   uv run "${CLAUDE_PLUGIN_ROOT}/scripts/board.py" --board "<store>/<board file>" \
+     --registry "<store>/<registry file>" drop <repo> <id>
+   ```
+3. Read its output as in `put`, step 4: `unchanged:` says the card is not on
+   the board; `changed:` is committed and pushed as there. A reason is the
+   author's if they gave one; never ask for one — without it, the subject
+   takes what the contract names for that case, the title from the `title:`
+   line.
 
 ## What This Skill Never Does
 
@@ -174,6 +194,10 @@ No contradictions → say so in one line. `show` never changes anything.
 
 - **`backlog-ops`** moves a card when a board is configured: a pull puts the
   item's card into the in-progress column, a close takes it off the board. It
-  reads the same contract; this skill shows the result.
+  reads the same contract and calls the same board script; this skill shows
+  the result.
 - **`backlog.py`** reads the items: `show` prints status, priority and title;
   `--repo` reads them at the remote's default branch, after a fetch.
+- **`board.py`** makes every change to the board — `put` and `drop` here,
+  `pull` and `close` from `backlog-ops` — and owns its format. `show` reads
+  the board file itself.

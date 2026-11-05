@@ -90,6 +90,8 @@ flowchart TB
         logb --> storesh
         refinement --> backpy["scripts/backlog.py"]
         backlog --> backpy
+        nxt --> boardpy["scripts/board.py"]
+        backlog --> boardpy
         loop["closed-loop"] --> loopy["scripts/loop.py"]
         loop --> storesh
         loop --> backpy
@@ -106,7 +108,7 @@ flowchart TB
 **`xxthunder-dev-skills`** — ten skills, all markdown, plus three pieces of
 executable code: a `SessionStart` hook under `hooks/` (`hooks.json`, an
 extensionless `session-start`, and a polyglot `run-hook.cmd` that locates a
-bash on Windows), and three plugin-level scripts under `scripts/`.
+bash on Windows), and four plugin-level scripts under `scripts/`.
 
 `scripts/` is the plugin's place for executable helpers **shared by more than
 one skill**; a helper used by a single skill stays in that skill's own
@@ -126,9 +128,12 @@ regenerating the README table of contents from the item files (ADR-0009), and
 checking the backlog. `next` calls its one read-only command, `show`, which
 prints an item's ID, status, priority and title — with `--repo`, for another
 repository, read at its remote's default branch without touching its working
-tree. `backlog-ops` calls `show --in-progress <ID>` before it makes a card on a
-pull: it prints only an item In Progress as work, epics and the standing
-refinement item left out, and its title is the card's. `loop.py` is the one
+tree. `board.py`, a PEP 723 script like it, makes every change to the board
+— `put` and `drop` from `next`, `pull` and `close` from `backlog-ops` — and
+owns the board's format: columns, card, escaping, links (ADR-0017). It reads
+an item's title fresh through `backlog.py`'s parser, gives no card to an epic
+or the standing refinement item, and says `changed:` or `unchanged:`, so the
+skill commits only a real change. `loop.py` is the one
 script here that a single skill calls: `closed-loop` runs it, and the eval
 harness runs it too, to seed a loop's state for its cases. It reads rows of
 the registry's tables, turns a remote into its org and repo, finds the first
@@ -165,9 +170,9 @@ The board and the logbook know nothing of each other.
 scripts run via `uv run`: `naps2-scan` (3 scripts), `simplex-merge` (1),
 `split-batch` (4). This is the bulk of the repository's executable code, but no
 longer all of it: the `SessionStart` hook and `scripts/store` above are shell,
-`scripts/backlog.py` is Python, and `tests/` is split `tests/paperless/` for the
-helper scripts, `tests/dev/` for the hook, the store resolver, the backlog
-script, and the backlog and ADR-log invariants.
+`scripts/backlog.py` and `scripts/board.py` are Python, and `tests/` is split
+`tests/paperless/` for the helper scripts, `tests/dev/` for the hook, the store
+resolver, the backlog and board scripts, and the backlog and ADR-log invariants.
 
 ## Key flows
 
@@ -349,7 +354,7 @@ sequenceDiagram
     end
     N-->>U: the board with status and priority, contradictions
     U->>N: put ITEM after OTHER
-    N->>K: card moved, commit-push
+    N->>K: card moved by board.py, commit-push
 ```
 
 A card holds the link to its item, the item's title and the author's reason;
@@ -358,11 +363,12 @@ drifted from its item is reported. A repo with a card is fetched and read at
 `origin/HEAD`, never pulled, by `backlog.py` (ADR-0010): another session may
 be working in that checkout, and its working tree, index and `HEAD` stay as
 they were. Only the store is pulled, by the resolver, because the board is
-written there. Columns, card format, link, checkout location and commit
-subject come from the store's `AGENTS.md` (ADR-0008). `show` reports
+written there. The board file, the registry, checkout location and commit
+subject come from the store's `AGENTS.md` (ADR-0008); columns, card format and
+link are `board.py`'s (ADR-0017). `show` reports
 contradictions between the board and the backlogs rather than smoothing them
 over, and writes nothing. `backlog-ops` moves cards on pull and close
-(ADR-0011); `next` places and drops them by hand.
+(ADR-0011); `next` places and drops them. Both go through `board.py`.
 
 ### Pushing a change
 

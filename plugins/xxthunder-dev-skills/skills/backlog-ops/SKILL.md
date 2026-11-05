@@ -1,7 +1,7 @@
 ---
 name: backlog-ops
 description: "Apply lifecycle operations to a backlog item — pull (Open → In Progress), tick an acceptance or UAT criterion, or close an item (→ Done) with automatic epic-status cascade. Stages file edits and never produces its own commit in the repository; a pull is handed to commit-helper for the default branch, and a configured Kanban board gets the item's card moved on pull and close. Trigger with: 'start XAS-025', 'pull XAS-025', 'mark AC 2 done on XAS-025', 'tick UAT 1 on XAS-025', 'close XAS-025', 'complete XAS-025' — also for a Jira issue key whose card is on the board ('pull PROJ-123', 'close PROJ-123'): then it moves that card and nothing else. It never reads or changes an issue in Jira; a request to change an issue in Jira is not for this skill."
-allowed-tools: Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/store *)
+allowed-tools: Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/store *), Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/board.py *)
 ---
 
 <!-- Source: https://github.com/xxthunder/xxthunder-agentic-skills/tree/develop/plugins/xxthunder-dev-skills/skills/backlog-ops -->
@@ -139,23 +139,30 @@ A board is the author's Kanban board in a store of its own, configured on the ma
    ```bash
    "${CLAUDE_PLUGIN_ROOT}/scripts/store" contract "<store>" Board
    ```
-   A non-zero exit: keep the message for the summary and skip the step. The contract names the board file, its columns and order, the card format and link, and the commit subject — this skill ships none of them.
-3. **Address the card** as the contract says, with this repository's name and the item ID — for a Jira address, the Jira project's name from the registry and the issue key. A repo the contract's registry does not list: name the missing row in the summary and write no card.
-4. **Move it**:
-   - after a **pull**: read the item with
+   A non-zero exit: keep the message for the summary and skip the step. The contract names the board file, the registry and the commit subject — this skill ships none of them. The board's format is the board script's.
+3. **Address the card** as the contract says, with this repository's name and the item ID — for a Jira address, the Jira project's name from the registry and the issue key.
+4. **Move it** with the board script — the board file and the registry as the contract names them, inside the store; `<backlog>` is this repository's backlog directory:
+   - after a **pull**:
      ```bash
-     uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" show --in-progress <ID>
+     uv run "${CLAUDE_PLUGIN_ROOT}/scripts/board.py" --board "<store>/<board file>" \
+       --registry "<store>/<registry file>" pull <repo> <ID> --dir <backlog>
      ```
-     It prints the item's line only when the item is In Progress *as work* — never for an epic or the ongoing refinement item, which get no card. No line → no card, nothing to do. Otherwise the item's card goes into the in-progress column at the place the contract names — out of the waiting column if it is there, newly made otherwise — with the title exactly as the script prints it. A card already in the in-progress column is left where it is.
-   - after a **pull** of a Jira address: no `show`, no read of Jira — the card moves from the waiting column into the in-progress column exactly as written; one already in the in-progress column stays where it is. An issue with no card on the board gets none: no card, no commit — say to put it on the board first with `next put`, and stop.
-   - after a **complete**: the item's card leaves the board — a Jira card as written, without reading Jira. No card → nothing to do.
+     For a Jira address, the same call without `--dir`.
+   - after a **complete**:
+     ```bash
+     uv run "${CLAUDE_PLUGIN_ROOT}/scripts/board.py" --board "<store>/<board file>" \
+       --registry "<store>/<registry file>" close <repo> <ID>
+     ```
 
-   Only the item named in the operation moves; keep every other card exactly as it was, in the layout the contract names.
-5. **Commit and push the board file alone**, with the contract's subject — only when step 4 changed it; nothing changed, no commit:
+   The script reads the item's title fresh, makes no card for an epic, the ongoing refinement item or a Jira issue without a card, never reads Jira, and leaves every other card as it was. Read its output:
+   - exit 1, one line `board: …` — a repo missing from the registry, an unknown item: keep the line for the summary; no card, no commit.
+   - `unchanged: …` — nothing to commit; the summary gives the script's reason. After a Jira pull whose issue has no card, say to put it on the board first with `next put`.
+   - `changed: …` — go on with step 5; the `title:` line is the title the subject needs.
+5. **Commit and push the board file alone**, with the contract's subject — only after `changed:`:
    ```bash
    "${CLAUDE_PLUGIN_ROOT}/scripts/store" commit-push "<store>" "<subject>" <board-file>
    ```
-   The script commits only the named file, so whatever else is staged — in the store, or in this repository when it is the store — stays staged. A rejected push or a conflict is reported in the summary; the script keeps the commit locally, and the pull or complete stands. Never resolve conflicts in the store.
+   `store commit-push` commits only the named file, so whatever else is staged — in the store, or in this repository when it is the store — stays staged. A rejected push or a conflict is reported in the summary; the script keeps the commit locally, and the pull or complete stands. Never resolve conflicts in the store.
 
 ### Step 3: Summarize staged changes
 
@@ -201,6 +208,7 @@ This skill does not know whether a logbook is configured; `logbook` finds out an
 - **`refinement`** hands off to this skill for any status mutation; it does not edit `**Status**:` fields directly.
 - **`design-record`** receives the hand-off from the binding-design check on Complete. Closing an item is the last moment to lift design that outlives it into the ADR log, because nothing keeps a closed item current.
 - **`next`** shows the board this skill moves cards on; both read the store's `Board` contract. This skill never ranks — placing a card in the waiting column is `next put`.
+- **`board.py`** makes the card move — `pull` and `close` here, `put` and `drop` from `next` — and owns the board's format.
 - **`logbook`** is suggested — one line, never invoked — after a pull and after a close, so a
   session's start and end can reach a cross-repo chronicle without this skill knowing
   whether one exists.

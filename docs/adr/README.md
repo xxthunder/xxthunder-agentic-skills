@@ -23,6 +23,7 @@ Why this repository looks the way it does. One decision per file, at
 | [0014](0014-eval-results-count-per-plugin-and-case-version.md) | Eval results count per plugin version and case version | Accepted | 2026-11-02 |
 | [0015](0015-the-plugin-ships-no-jira-client.md) | The plugin ships no Jira client | Accepted | 2026-11-04 |
 | [0016](0016-the-closed-loop-is-a-thin-conductor-over-sdd.md) | The closed loop is a thin conductor over superpowers' SDD | Accepted | 2026-11-05 |
+| [0017](0017-the-board-format-belongs-to-board-py.md) | The board's format belongs to `board.py` | Accepted | 2026-11-05 |
 
 ---
 
