@@ -55,7 +55,6 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
-- [XAS-060 — A board move goes through a script, not through the agent's hand edit](xas-060.md)
 - [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
 - [XAS-027 — Agentic Engineering-as-Code — durable design record](xas-027.md)
@@ -64,6 +63,7 @@
 - [XAS-001 — Backlog refinement](xas-001.md)
 
 ### Done
+- [XAS-060 — A board move goes through a script, not through the agent's hand edit](xas-060.md)
 - [XAS-059 — The skill repo's rubric guides the loop's reviewer](xas-059.md)
 - [XAS-057 — Every `SKILL.md` frontmatter is checked by a test](xas-057.md)
 - [XAS-056 — `evals/` is checked against skill-creator's eval tooling: keep, align or replace](xas-056.md)
