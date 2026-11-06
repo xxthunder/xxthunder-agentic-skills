@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-079 — The pre-push gate keeps its tests out of the real repository when pushed from a worktree](xas-079.md)
 - [XAS-078 — board.py polish from the XAS-060 reviews](xas-078.md)
 - [XAS-077 — The ADR log can record that a decision amends part of an earlier one](xas-077.md)
 - [XAS-076 — The skills' remaining registry lookups go through one script](xas-076.md)
