@@ -9,6 +9,11 @@
 ## Table of Contents
 
 ### Open
+- [XAS-078 — board.py polish from the XAS-060 reviews](xas-078.md)
+- [XAS-077 — The ADR log can record that a decision amends part of an earlier one](xas-077.md)
+- [XAS-076 — The skills' remaining registry lookups go through one script](xas-076.md)
+- [XAS-075 — backlog.py loses show --in-progress, which no skill calls any more](xas-075.md)
+- [XAS-074 — A title or reason with ' · ' on the board stays whole](xas-074.md)
 - [XAS-073 — A script writes the board table](xas-073.md)
 - [XAS-072 — The tester shows RED without a CI run when the tests run only in CI](xas-072.md)
 - [XAS-071 — The closed loop reaches its gate in a repository whose CI lints commit messages](xas-071.md)
