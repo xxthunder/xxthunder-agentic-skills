@@ -18,10 +18,11 @@ It does not replay stories: their deltas include reversed and superseded decisio
 - **No mapping of closed items** (2026-11-07, XAS-044): items are history and link to no requirement, so the scan proposes requirements only.
 - **Omission beats invention**: behaviour the scan cannot determine — code, tests and docs disagree, or say nothing — is named as open, not guessed.
 - **Decided in this item**: a new skill, or a mode of `architecture-scan`.
+- **Only once a prompt repeats** (author, 2026-11-07): shortcuts drafts px-proxy (SC-073c) and wsl-manager by prompt first; SC-073c does not wait for this item. If the two prompts turn out to be the same, this item turns that prompt into a skill or a mode of `architecture-scan`, with the two runs as eval cases; if not, it is dropped.
 
 **Acceptance Criteria**:
 - [ ] For a named area, the scan proposes requirements, and writes nothing
 - [ ] Applying an approved proposal goes through `design-record`
 - [ ] Behaviour the scan cannot determine is listed as open
-- [ ] Used on shortcuts px-proxy (SC-073c)
+- [ ] Its eval cases are the prompt runs of shortcuts px-proxy (SC-073c) and wsl-manager
 - [ ] The plugin version is bumped (minor)
