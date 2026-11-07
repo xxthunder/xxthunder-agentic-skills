@@ -1,6 +1,6 @@
 # [XAS-044b] ADR headers as needs
 
-**Status**: Open
+**Status**: In Progress
 **Priority**: Medium
 **Component**: `plugins/xxthunder-dev-skills/skills/design-record/` (ADR header, migration), `tests/`
 **Depends on**: [XAS-044a](xas-044a.md)
