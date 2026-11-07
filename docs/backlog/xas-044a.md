@@ -16,6 +16,7 @@ ADR-0001 stays binding for repositories without a root `ubproject.toml`. The new
 - **Alternatives to record**, from the conversation of 2026-10-23:
   - Generate needs from the plain-Markdown items at build time. Rejected: ubCode indexes native needs while editing, a generator would have to track the item format, and each item would exist twice.
   - Let the existing items decide the format, without a switch. Rejected: a root `ubproject.toml` is where useblocks keeps the one configuration both readers use, so it is the natural switch.
+  - Make item headers needs too, and let stories link to the requirements they change. Rejected (2026-11-07): a Done item is history, not product knowledge; it must not show up in the product view, not even as a backlink. Git history already links an item to the changes it made.
   - Keep "the story is the requirement" (ADR-0001) and trace code to stories. Rejected: a closed story is history, and the trace goes stale silently (SC-040 and SC-067 in shortcuts).
 
 **Acceptance Criteria**:

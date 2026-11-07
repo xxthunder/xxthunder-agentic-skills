@@ -34,7 +34,7 @@
 - [XAS-048 — Lint and format a file after the agent saves it](xas-048.md)
 - [XAS-044d — Read-only requirements scan for bootstrapping](xas-044d.md)
 - [XAS-044c — `design-record` keeps requirements true, and closing an item changes them](xas-044c.md)
-- [XAS-044b — Item and ADR headers as needs](xas-044b.md)
+- [XAS-044b — ADR headers as needs](xas-044b.md)
 - [XAS-044a — ADR: requirements become a binding design artifact where sphinx-needs is in use](xas-044a.md)
 - [XAS-044 — Requirements as a binding design artifact where sphinx-needs is in use](xas-044.md)
 - [XAS-038 — Make a feature branch ready to merge](xas-038.md)
