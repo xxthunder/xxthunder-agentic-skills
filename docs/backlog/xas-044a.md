@@ -18,6 +18,7 @@ ADR-0001 stays binding for repositories without a root `ubproject.toml`. The new
   - Let the existing items decide the format, without a switch. Rejected: a root `ubproject.toml` is where useblocks keeps the one configuration both readers use, so it is the natural switch.
   - Make item headers needs too, and let stories link to the requirements they change. Rejected (2026-11-07): a Done item is history, not product knowledge; it must not show up in the product view, not even as a backlink. Git history already links an item to the changes it made.
   - Keep "the story is the requirement" (ADR-0001) and trace code to stories. Rejected: a closed story is history, and the trace goes stale silently (SC-040 and SC-067 in shortcuts).
+- **ADR-0001 is narrowed, not superseded** (author, 2026-11-08): its Status line becomes `Accepted, narrowed by ADR-0018`, linked; its body stays. The status is new to `design-record`'s ADR format, so it is specified in XAS-044b, and ADR-0001's Status line changes in XAS-044b's pull request; criterion 2 is met there.
 
 **Acceptance Criteria**:
 - [ ] A new ADR, recorded through `design-record`, states context (ADR-0001's two reasons and what changed), decision (XAS-044's Scope Decisions), the alternatives above and the consequences

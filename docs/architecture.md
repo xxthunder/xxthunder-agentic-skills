@@ -155,7 +155,10 @@ which is why a rule lives in exactly one of them.
 evidence package from the target repository's contract.
 
 `refinement` and `retrospective` are conversation skills; `backlog-ops` is
-mechanics-only; `design-record` is the sole writer of the record;
+mechanics-only; `design-record` is the sole writer of the record — the ADR
+log and `architecture.md`; where a root `ubproject.toml` switches sphinx-needs
+on, requirements join them (ADR-0018), which `design-record` does not write yet
+(XAS-044c);
 `architecture-scan` is read-only and proposes into it; `commit-helper` sits at
 the boundary of a change. `learnings`, `logbook` and `next` are the three skills whose
 output is a store: they write to their store and nothing

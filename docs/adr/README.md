@@ -24,6 +24,7 @@ Why this repository looks the way it does. One decision per file, at
 | [0015](0015-the-plugin-ships-no-jira-client.md) | The plugin ships no Jira client | Accepted | 2026-11-04 |
 | [0016](0016-the-closed-loop-is-a-thin-conductor-over-sdd.md) | The closed loop is a thin conductor over superpowers' SDD | Accepted | 2026-11-05 |
 | [0017](0017-the-board-format-belongs-to-board-py.md) | The board's format belongs to `board.py` | Accepted | 2026-11-05 |
+| [0018](0018-requirements-are-binding-where-sphinx-needs-is-in-use.md) | Requirements are a binding design artifact where sphinx-needs is in use | Accepted | 2026-11-08 |
 
 ---
 

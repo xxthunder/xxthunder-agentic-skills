@@ -29,10 +29,12 @@ Backlog items keep their format: they are history, not product knowledge (XAS-04
   - Whether the `#` heading stays beside the need title (readable on GitHub, but the title twice) or the need title replaces it; the ADR index takes its title from whichever stays.
   - Which need type, fields and link types the consuming repository has to declare in its `ubproject.toml`, and whether the skill writes those declarations or documents them.
   - The need ID pattern: ADR IDs such as `ADR-0001` need a `needs_id_regex` that allows them.
+- **A partial supersede** (author, 2026-11-08, from XAS-044a): `design-record`'s ADR format gains the status `Accepted, narrowed by ADR-NNNN`, for an ADR that stays binding outside the scope a later ADR takes over; the narrowing ADR names it in a `**Narrows**:` line below `**Related**`, as `**Supersedes**:` does (the agent's call, not discussed). ADR-0001 gets that Status line, pointing at ADR-0018, in this item's pull request.
 
 **Acceptance Criteria**:
 - [ ] `design-record` specifies the need-shaped ADR header, the switch and the migration
 - [ ] `design-record` writes need-shaped ADR headers where the switch is on, and the old format where it is off
 - [ ] The migration converts a fixture ADR log; a second run changes nothing
 - [ ] A migrated fixture builds with Sphinx `-W` and passes `ubc check` without findings
+- [ ] `design-record` specifies the status `Accepted, narrowed by ADR-NNNN`, and ADR-0001 carries it, pointing at ADR-0018
 - [ ] The plugin version is bumped (minor)
