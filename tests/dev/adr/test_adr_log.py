@@ -24,14 +24,18 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 ADR_DIR = REPO_ROOT / "docs" / "adr"
 
 FILENAME_RE = re.compile(r"^(\d{4})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
-HEADING_RE = re.compile(r"^#\s+ADR-(\d{4})\s+—\s+(.+?)\s*$")
-FIELD_RE = re.compile(r"^\*\*(Status|Date|Related|Supersedes)\*\*:\s*(.+?)\s*$")
+# The heading separator is a colon (`# ADR-NNNN: Title`) or, in older ADRs, an
+# em-dash; the em-dash is written as an escape so no new line carries one.
+HEADING_RE = re.compile(r"^#\s+ADR-(\d{4})(?::|\s+\N{EM DASH})\s+(.+?)\s*$")
+FIELD_RE = re.compile(r"^\*\*(Status|Date|Related|Supersedes|Narrows)\*\*:\s*(.+?)\s*$")
 INDEX_ROW_RE = re.compile(
     r"^\|\s*\[(\d{4})\]\(([^)]+)\)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$"
 )
 MD_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 SUPERSEDED_RE = re.compile(r"^Superseded by ADR-(\d{4})$")
 SUPERSEDES_RE = re.compile(r"ADR-(\d{4})")
+NARROWED_RE = re.compile(r"^Accepted, narrowed by ADR-(\d{4})$")
+NARROWS_RE = SUPERSEDES_RE
 
 REQUIRED_SECTIONS = (
     "## Context",
@@ -77,6 +81,7 @@ def parse_adr(path: Path) -> dict:
         "status": strip_links(fields["Status"]) if "Status" in fields else None,
         "date": fields.get("Date"),
         "supersedes": fields.get("Supersedes"),
+        "narrows": fields.get("Narrows"),
         "sections": [ln for ln in lines if ln.startswith("## ")],
         "links": [m.group(2) for ln in lines for m in MD_LINK_RE.finditer(ln)],
     }
@@ -109,7 +114,7 @@ def check_headers(adr_dir: Path) -> list[str]:
     for p in adr_files(adr_dir):
         adr = parse_adr(p)
         if adr["number"] is None:
-            problems.append(f"{p.name}: no '# ADR-NNNN — Title' heading")
+            problems.append(f"{p.name}: no '# ADR-NNNN: Title' heading")
         elif FILENAME_RE.match(p.name) and adr["number"] != p.name[:4]:
             problems.append(
                 f"{p.name}: heading says ADR-{adr['number']}, filename says {p.name[:4]}"
@@ -132,7 +137,11 @@ def check_statuses(adr_dir: Path) -> list[str]:
         status = parse_adr(p)["status"]
         if status is None:
             continue
-        if status not in SIMPLE_STATUSES and not SUPERSEDED_RE.match(status):
+        if (
+            status not in SIMPLE_STATUSES
+            and not SUPERSEDED_RE.match(status)
+            and not NARROWED_RE.match(status)
+        ):
             problems.append(f"{p.name}: status {status!r} is not a permitted value")
     return problems
 
@@ -241,6 +250,43 @@ def check_supersede_symmetry(adr_dir: Path) -> list[str]:
     return problems
 
 
+def check_narrowing(adr_dir: Path) -> list[str]:
+    """`**Narrows**` and `Accepted, narrowed by` must answer each other."""
+    adrs = {}
+    for p in adr_files(adr_dir):
+        adr = parse_adr(p)
+        if adr["number"]:
+            adrs[adr["number"]] = adr
+
+    problems = []
+    for num, adr in adrs.items():
+        if adr["narrows"]:
+            m = NARROWS_RE.search(strip_links(adr["narrows"]))
+            if not m:
+                problems.append(f"{adr['name']}: **Narrows** names no ADR-NNNN")
+                continue
+            target = m.group(1)
+            other = adrs.get(target)
+            if other is None:
+                problems.append(f"{adr['name']}: narrows missing ADR-{target}")
+            elif other["status"] != f"Accepted, narrowed by ADR-{num}":
+                problems.append(
+                    f"ADR-{target}: status {other['status']!r}, "
+                    f"expected 'Accepted, narrowed by ADR-{num}'"
+                )
+        status_match = NARROWED_RE.match(adr["status"] or "")
+        if status_match:
+            by = status_match.group(1)
+            other = adrs.get(by)
+            if other is None:
+                problems.append(f"{adr['name']}: narrowed by missing ADR-{by}")
+            else:
+                named = NARROWS_RE.search(strip_links(other["narrows"] or ""))
+                if not named or named.group(1) != num:
+                    problems.append(f"ADR-{by}: claims no **Narrows** for ADR-{num}")
+    return problems
+
+
 def check_links_resolve(adr_dir: Path) -> list[str]:
     problems = []
     targets = adr_files(adr_dir) + [adr_dir / "README.md"]
@@ -266,6 +312,7 @@ ALL_CHECKS = (
     check_sections,
     check_index_agreement,
     check_supersede_symmetry,
+    check_narrowing,
     check_links_resolve,
 )
 

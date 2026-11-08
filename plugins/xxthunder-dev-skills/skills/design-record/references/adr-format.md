@@ -15,7 +15,7 @@ If `docs/adr/` does not exist, create it along with a `README.md` index.
 
 ## Template
 
-    # ADR-NNNN — Title in sentence case
+    # ADR-NNNN: Title in sentence case
 
     **Status**: Proposed
     **Date**: YYYY-MM-DD
@@ -80,6 +80,7 @@ repository, a link into the plugin directory does not resolve.
 | `Accepted` | Agreed and in force |
 | `Rejected` | Considered and declined |
 | `Superseded by ADR-NNNN` | Replaced by a later decision |
+| `Accepted, narrowed by ADR-NNNN` | Agreed and in force outside the scope a later ADR took over |
 
 **Rejected ADRs stay in the log.** "We considered this and said no" is as useful
 a record as a yes, and deleting it guarantees the same idea is re-litigated.
@@ -92,7 +93,7 @@ the only thing the log is for.
 
 Exactly two edits are permitted:
 
-1. Its `**Status**` line, at supersede time.
+1. Its `**Status**` line, at supersede or narrowing time.
 2. A correction that changes no meaning: a typo, a broken link, or wording that
    misleads about what the ADR already decided.
 
@@ -111,6 +112,22 @@ When ADR-0009 replaces ADR-0004:
    `**Status**: Superseded by [ADR-0009](0009-....md)`.
 3. **ADR-0004's body is not touched.** Not corrected, not annotated, not
    softened.
+
+## The narrowing path
+
+When ADR-0018 takes over part of what ADR-0001 decided, and ADR-0001 stays in
+force for the rest:
+
+1. ADR-0018 gains a `**Narrows**: [ADR-0001](0001-....md)` line in its header
+   block, below `**Related**`, followed by the scope it takes over.
+2. ADR-0001's `**Status**` line becomes `Accepted, narrowed by ADR-0018`,
+   linked: `**Status**: Accepted, narrowed by [ADR-0018](0018-....md)`.
+3. **ADR-0001's body is not touched.** The two ADRs answer each other: a
+   `**Narrows**` line without the matching status, or the status without the
+   line, is a defect.
+
+Use this path when the old decision still stands for some cases; use the
+supersede path when it stands for none.
 
 ## The index is derived
 
