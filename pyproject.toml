@@ -11,6 +11,7 @@ dev = [
     "pypdf>=4",
     "reportlab>=4",
     "pyyaml>=6",
+    "tomlkit>=0.13",
 ]
 
 [tool.uv]
