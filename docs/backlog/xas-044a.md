@@ -1,6 +1,6 @@
 # [XAS-044a] ADR: requirements become a binding design artifact where sphinx-needs is in use
 
-**Status**: Open
+**Status**: In Progress
 **Priority**: Medium
 **Component**: `docs/adr/` (new ADR, ADR-0001), `docs/adr/README.md`, `docs/architecture.md`
 
