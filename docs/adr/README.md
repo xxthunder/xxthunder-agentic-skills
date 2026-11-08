@@ -7,7 +7,7 @@ Why this repository looks the way it does. One decision per file, at
 
 | ADR | Title | Status | Date |
 |-----|-------|--------|------|
-| [0001](0001-two-design-artifacts-split-by-lifetime.md) | Two design artifacts, split by lifetime | Accepted | 2026-08-12 |
+| [0001](0001-two-design-artifacts-split-by-lifetime.md) | Two design artifacts, split by lifetime | Accepted, narrowed by ADR-0018 | 2026-08-12 |
 | [0002](0002-architecture-doc-fixed-slots-for-structure.md) | `architecture.md` uses fixed slots for structure, free-form for behaviour | Accepted | 2026-08-12 |
 | [0003](0003-one-writer-for-the-design-record.md) | The design record has exactly one writer | Accepted | 2026-08-12 |
 | [0004](0004-always-on-rule-is-orientation-not-enforcement.md) | The always-on rule is orientation, not enforcement | Accepted | 2026-08-12 |
@@ -36,10 +36,12 @@ Why this repository looks the way it does. One decision per file, at
 - **Numbers are sequential and never reused.** Four digits, zero-padded.
 - **An accepted ADR is immutable.** A changed mind is a new ADR that supersedes
   it. The only permitted edit to an existing ADR is its `**Status**` line at
-  supersede time.
+  supersede or narrowing time.
 - **Statuses**: `Proposed` → `Accepted` | `Rejected`, and later
   `Superseded by ADR-NNNN`. Rejected ADRs stay in the log — "we considered this
   and said no" is as useful a record as a yes.
+  A later ADR that takes over part of the scope leaves the rest in force:
+  `Accepted, narrowed by ADR-NNNN`.
 - **What earns an ADR** — all three must hold: the consequences outlive the
   change, a competent engineer could have chosen otherwise, and the reason is
   not recoverable from the code. Rationale that fails the test belongs in the

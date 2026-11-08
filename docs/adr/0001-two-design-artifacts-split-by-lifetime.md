@@ -1,6 +1,6 @@
 # ADR-0001 — Two design artifacts, split by lifetime
 
-**Status**: Accepted
+**Status**: Accepted, narrowed by [ADR-0018](0018-requirements-are-binding-where-sphinx-needs-is-in-use.md)
 **Date**: 2026-08-12
 **Related**: [XAS-027](../backlog/xas-027.md)
 
