@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-082 — backlog.py and board.py write no em-dash](xas-082.md)
 - [XAS-081 — The evidence package summarises the change and the gate as the contract says](xas-081.md)
 - [XAS-080 — The closed loop runs its scripts where the repository's commands run](xas-080.md)
 - [XAS-079 — The pre-push gate keeps its tests out of the real repository when pushed from a worktree](xas-079.md)

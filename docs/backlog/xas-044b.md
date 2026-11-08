@@ -29,6 +29,7 @@ Backlog items keep their format: they are history, not product knowledge (XAS-04
 - **The migration writes the declarations** (author, 2026-11-08): it adds the need type `decision` and the link type `constrains` to `ubproject.toml` where they are missing, keeping the file's comments. It refuses when either already exists with other settings, or when the repository's `id_regex` rejects the ADR IDs (`ADR-0001`); it never changes `id_regex`. `status` is a built-in field.
 - **The migration knows only the template** (author, 2026-11-08): it converts headers in `design-record`'s template format and refuses any other. A repository whose ADR headers differ normalizes them first, in an item of its own; for shortcuts that is a substory of SC-073.
 - **A partial supersede** (author, 2026-11-08, from XAS-044a): `design-record`'s ADR format gains the status `Accepted, narrowed by ADR-NNNN`, for an ADR that stays binding outside the scope a later ADR takes over; the narrowing ADR names it in a `**Narrows**:` line below `**Related**`, as `**Supersedes**:` does (the agent's call, not discussed). ADR-0001 gets that Status line, pointing at ADR-0018, in this item's pull request.
+- **The template heading is `# ADR-NNNN: Title`** (author, 2026-11-08): the em-dash is banned in new text everywhere (global rule), so `design-record`'s template separates number and title with a colon. Existing ADRs keep their headings; the migration accepts only the colon form.
 
 **Acceptance Criteria**:
 - [ ] `design-record` specifies the need-shaped ADR header, the switch and the migration
