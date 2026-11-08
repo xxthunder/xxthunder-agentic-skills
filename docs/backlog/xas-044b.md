@@ -25,10 +25,9 @@ Backlog items keep their format: they are history, not product knowledge (XAS-04
 - **Only ADRs** (2026-11-07): item headers stay bold-field lines in every repository; `backlog.py` is not touched.
 - **Switch per repository, not per ADR**: a root `ubproject.toml`. `design-record` writes the format the switch selects.
 - **Migration**: one command converts all ADRs at once; it is idempotent and refuses an ADR log it cannot convert completely.
-- **Decided in this item**:
-  - Whether the `#` heading stays beside the need title (readable on GitHub, but the title twice) or the need title replaces it; the ADR index takes its title from whichever stays.
-  - Which need type, fields and link types the consuming repository has to declare in its `ubproject.toml`, and whether the skill writes those declarations or documents them.
-  - The need ID pattern: ADR IDs such as `ADR-0001` need a `needs_id_regex` that allows them.
+- **The heading stays beside the need title** (author, 2026-11-08): Sphinx needs a `#` heading as the page title (a page without one breaks a `-W` build in a toctree), and GitHub shows the need only as a code block. Both carry the same text; the migration copies the heading into the need title, and its tests check that they are equal. The ADR index keeps taking its title from the heading.
+- **The migration writes the declarations** (author, 2026-11-08): it adds the need type `decision` and the link type `constrains` to `ubproject.toml` where they are missing, keeping the file's comments. It refuses when either already exists with other settings, or when the repository's `id_regex` rejects the ADR IDs (`ADR-0001`); it never changes `id_regex`. `status` is a built-in field.
+- **The migration knows only the template** (author, 2026-11-08): it converts headers in `design-record`'s template format and refuses any other. A repository whose ADR headers differ normalizes them first, in an item of its own; for shortcuts that is a substory of SC-073.
 - **A partial supersede** (author, 2026-11-08, from XAS-044a): `design-record`'s ADR format gains the status `Accepted, narrowed by ADR-NNNN`, for an ADR that stays binding outside the scope a later ADR takes over; the narrowing ADR names it in a `**Narrows**:` line below `**Related**`, as `**Supersedes**:` does (the agent's call, not discussed). ADR-0001 gets that Status line, pointing at ADR-0018, in this item's pull request.
 
 **Acceptance Criteria**:
