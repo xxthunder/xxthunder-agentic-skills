@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-081 — The evidence package summarises the change and the gate as the contract says](xas-081.md)
 - [XAS-080 — The closed loop runs its scripts where the repository's commands run](xas-080.md)
 - [XAS-079 — The pre-push gate keeps its tests out of the real repository when pushed from a worktree](xas-079.md)
 - [XAS-078 — board.py polish from the XAS-060 reviews](xas-078.md)
