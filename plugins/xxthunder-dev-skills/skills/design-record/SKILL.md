@@ -38,6 +38,8 @@ it exists to avoid.
 |----------------|-----------|---------|
 | "record an ADR", "document this decision", "write up why we chose X" | record decision | [Recording a decision](#recording-a-decision) |
 | "supersede ADR-0004", "we're changing our mind about X" | supersede | [Superseding](#superseding-an-adr) |
+| "ADR-0018 narrows ADR-0001", "ADR-0001 stays in force, except for X" | narrow | [Narrowing](#narrowing-an-adr) |
+| "convert the ADRs to needs", "make the ADRs sphinx-needs needs" | migrate | [ADRs as needs](#adrs-as-needs) |
 | "regenerate the ADR index", "the index is out of date" | reindex | [The index](#maintaining-the-index) |
 | "update the architecture doc", "redraw the container diagram", "document this module" | edit architecture | [Editing architecture.md](#editing-architecturemd) |
 
@@ -133,15 +135,36 @@ if there is one.
 `docs/adr/NNNN-kebab-title.md`. The title is sentence case, kebab-cased for the
 filename, and short enough to read in an index row.
 
+Write the file in the template of
+[references/adr-format.md](references/adr-format.md): the first line is
+`# ADR-NNNN: Title`, a colon after the number. Older ADRs in the log may use
+another separator, such as a dash; do not copy it. Write the bold-field header
+block even where the repository uses sphinx-needs: Step 6b turns it into a
+need, so there is no second template.
+
 ### Step 6: Update the index
 
 Add the row to `docs/adr/README.md` per
 [Maintaining the index](#maintaining-the-index). Create that file if absent.
 
+### Step 6b: Make the ADR a need
+
+Where a `ubproject.toml` exists in the repository root, run the migration as
+described in [ADRs as needs](#adrs-as-needs). Without that file, skip this step.
+
+When the migration succeeds, stage every file it changed: the new ADR, older
+ADRs it converted, and `ubproject.toml`. `git status` lists them.
+
+When the migration refuses, the ADR and the index row from Steps 5 and 6 stay
+as written, in the bold-field form. Show the refusal message as the script
+printed it (it names what to set, such as `id_regex` or `needs.types`). In
+Step 7, report what was written and that the migration did not run, then stop.
+Do not write the directive, `id_regex` or the need types yourself.
+
 ### Step 7: Report
 
-State the path written, the number allocated, the status, and that the change is
-staged and uncommitted.
+State the path written, the number allocated, the status, whether the
+migration ran, and that the change is staged and uncommitted.
 
 ## Superseding an ADR
 
@@ -152,6 +175,52 @@ staged and uncommitted.
 3. **Touch nothing else in the old file.** Its body is history and stays wrong
    if it was wrong.
 4. Update both rows in the index.
+5. Run Step 6b (the migration, where a root `ubproject.toml` exists): it sets
+   the old ADR's `:status:` to `Superseded`. Stage what it changed.
+
+## Narrowing an ADR
+
+Use this when the old decision still stands for some cases; use
+[Superseding](#superseding-an-adr) when it stands for none. The operation is
+"The narrowing path" in [references/adr-format.md](references/adr-format.md):
+
+1. Write the **new** ADR through the normal flow, adding a `**Narrows**:` line
+   that links the old one and names the scope it takes over.
+2. Edit the old ADR's `**Status**` line to
+   `Accepted, narrowed by [ADR-NNNN](NNNN-....md)`.
+3. **Touch nothing else in the old file.**
+4. Update both rows in the index: the old ADR's status column becomes
+   `Accepted, narrowed by ADR-NNNN`.
+5. Run Step 6b (the migration, where a root `ubproject.toml` exists), and stage
+   what it changed.
+
+## ADRs as needs
+
+Where the repository root holds a `ubproject.toml`, the repository builds its
+docs with sphinx-needs, and every ADR carries a `decision` need below its
+heading. The header's shape is "The need-shaped header" in
+[references/adr-format.md](references/adr-format.md). The script does the
+conversion; do not write the directive by hand:
+
+```bash
+uv run "${CLAUDE_PLUGIN_ROOT}/scripts/adr.py" migrate --repo <repo root>
+```
+
+It turns every ADR header that is not a need yet into one, sets the `:status:`
+of a converted ADR to the word of its Status line where they differ (it prints
+`updated: <path>`), and declares the need type and link type in `ubproject.toml`. A
+second run changes nothing.
+
+On the request "convert the ADRs to needs", run only this command, stage the
+files it changed, then report what it changed.
+
+**A refusal ends the step.** The script refuses when an ADR does not fit the
+template or a declaration in `ubproject.toml` conflicts, and then writes
+nothing. Show its message to the user and stop. Do not fix the refusal
+yourself: in particular, never write or change `id_regex` or `needs.types` in
+`ubproject.toml`; the message names what the user has to set. A `ubproject.toml`
+without `needs.types` is refused, because a `decision` entry would replace
+sphinx-needs' default need types.
 
 ## Maintaining the index
 

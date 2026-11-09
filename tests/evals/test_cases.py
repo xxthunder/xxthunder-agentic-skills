@@ -3,6 +3,7 @@ on the end state its scenario asks for — built here by hand, without an agent.
 from __future__ import annotations
 
 import subprocess
+import tomllib
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
@@ -10,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from evals.board import BOARD_FILE, card, jira_card
-from evals.cases import CASES, FEATURE_BRANCH, RUBRIC, flagged, gate_script
+from evals.cases import ADR_ONE, ADR_ONE_ORIGINAL, ADR_TWO, ADR_TWO_ROW, ADR_TWO_STALE, CASES, NEEDS_UBPROJECT, REFUSING_UBPROJECT, FEATURE_BRANCH, RUBRIC, flagged, gate_script
 from evals.fixture import INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, JIRA_ISSUES, State, build, display_id
 
 REPO = Path(__file__).resolve().parents[2]
@@ -22,6 +23,10 @@ CLAIM = "A health check that calls its dependencies turns one outage into many."
 NOTE = f"learnings/{TODAY}_health_checks_spread_outages.md"
 ADR = "docs/adr/0002-the-sync-job-keeps-its-retry-state-in-sqlite.md"
 BY_NAME = {c.name: c for c in CASES}
+SUPERSEDING_ADR = "docs/adr/0003-the-sync-job-runs-as-a-long-running-worker.md"
+# ADR-0001 as the setup of design-record-supersede-needs leaves it: colon heading, a converted header.
+ADR_ONE_CONVERTED = ADR_ONE_ORIGINAL.replace("# ADR-0001 \u2014 ", "# ADR-0001: ", 1).replace(
+    "\n\n**Status**", "\n\n```{decision} The sync job runs from cron\n:id: ADR-0001\n:status: Accepted\n```\n\n**Status**", 1)
 NEW_ITEM = "docs/backlog/demo-008.md"
 NEW_ITEM_TEXT = ("# [DEMO-008] Document the release process\n\n**Status**: Open\n**Priority**: Medium\n"
                  "**Component**: `RELEASE.md`\n\n**Summary**:\nAs a maintainer, I want the release steps written down.\n\n"
@@ -202,11 +207,51 @@ def expected(name: str) -> State:
     if name == "learnings-recall":
         return replace(s, output="- git archive exports commits only — learnings/2026-10-01_git_archive_exports_commits_only.md")
     if name == "design-record-adr":
-        adr = (f"# ADR-0002 — The sync job keeps its retry state in SQLite\n\n**Status**: Accepted\n"
+        adr = (f"# ADR-0002: The sync job keeps its retry state in SQLite\n\n**Status**: Accepted\n"
                f"**Date**: {TODAY}\n**Related**: [DEMO-001](../backlog/demo-001.md)\n\n## Context\n\n"
                "## Decision\n\n## Alternatives considered\n\nRedis.\n\n## Consequences\n")
         return replace(s, demo_porcelain=" M docs/adr/README.md\n?? docs/adr/0002\n",
                        demo_files={ADR: adr, "docs/adr/README.md": "| [0002](0002-the-sync-job-keeps-its-retry-state-in-sqlite.md) |"})
+    if name == "design-record-adr-needs":
+        base = expected("design-record-adr")
+        adr = base.demo_files[ADR].replace(
+            "\n\n**Status**", "\n\n```{decision} The sync job keeps its retry state in SQLite\n:id: ADR-0002\n"
+            ":status: Accepted\n```\n\n**Status**", 1)
+        one = ("# ADR-0001: The sync job runs from cron\n\n```{decision} The sync job runs from cron\n"
+               ":id: ADR-0001\n:status: Accepted\n```\n\n**Status**: Accepted\n")
+        toml = NEEDS_UBPROJECT + ('\n[[needs.types]]\ndirective = "decision"\n\n'
+                                  '[needs.links.constrains]\nincoming = "is constrained by"\noutgoing = "constrains"\n')
+        return replace(base, demo_files={**base.demo_files, ADR: adr, ADR_ONE: one, "ubproject.toml": toml})
+    if name == "design-record-adr-needs-refused":
+        base = expected("design-record-adr")
+        return replace(base, output="The migration refused: ADR-0001 does not match id_regex in ubproject.toml.",
+                       demo_files={**base.demo_files, "ubproject.toml": REFUSING_UBPROJECT})
+    if name == "design-record-convert-needs":
+        one = ("# ADR-0001: The sync job runs from cron\n\n```{decision} The sync job runs from cron\n"
+               ":id: ADR-0001\n:status: Accepted\n```\n\n**Status**: Accepted\n")
+        toml = NEEDS_UBPROJECT + ('\n[[needs.types]]\ndirective = "decision"\n\n'
+                                  '[needs.links.constrains]\nincoming = "is constrained by"\noutgoing = "constrains"\n')
+        return replace(s, demo_files={ADR_ONE: one, "ubproject.toml": toml})
+    if name == "design-record-narrow":
+        new = ("# ADR-0002: The monthly full re-sync runs from a systemd timer\n\n**Status**: Accepted\n"
+               f"**Date**: {TODAY}\n**Related**: [DEMO-001](../backlog/demo-001.md)\n"
+               "**Narrows**: [ADR-0001](0001-the-sync-job-runs-from-cron.md), for the monthly full re-sync\n\n## Context\n")
+        one = ADR_ONE_ORIGINAL.replace("**Status**: Accepted",
+                                       "**Status**: Accepted, narrowed by [ADR-0002](0002-the-monthly-full-re-sync-runs-from-a-systemd-timer.md)", 1)
+        index = ("| [0001](0001-the-sync-job-runs-from-cron.md) | The sync job runs from cron | Accepted, narrowed by ADR-0002 |\n"
+                 "| [0002](0002-the-monthly-full-re-sync-runs-from-a-systemd-timer.md) | x | Accepted |\n")
+        return replace(s, demo_files={"docs/adr/0002-the-monthly-full-re-sync-runs-from-a-systemd-timer.md": new,
+                                      ADR_ONE: one, "docs/adr/README.md": index})
+    if name == "design-record-supersede-needs":
+        two = ("# ADR-0003: The sync job runs as a long-running worker\n\n"
+               "```{decision} The sync job runs as a long-running worker\n:id: ADR-0003\n:status: Accepted\n```\n\n"
+               f"**Status**: Accepted\n**Date**: {TODAY}\n**Related**: [DEMO-001](../backlog/demo-001.md)\n"
+               "**Supersedes**: [ADR-0001](0001-the-sync-job-runs-from-cron.md)\n\n## Context\n")
+        one = ADR_ONE_CONVERTED.replace("**Status**: Accepted",
+                                        "**Status**: Superseded by [ADR-0003](0003-the-sync-job-runs-as-a-long-running-worker.md)", 1
+                                        ).replace(":status: Accepted", ":status: Superseded", 1)
+        return replace(s, demo_files={SUPERSEDING_ADR: two, ADR_ONE: one, "ubproject.toml": NEEDS_UBPROJECT,
+                                      ADR_TWO: ADR_TWO_STALE.replace(":status: Proposed", ":status: Accepted", 1)})
     if name == "design-record-declines":
         return replace(s, skills=["xxthunder-dev-skills:design-record"],
                        output="This fails part 2 of the three-part test: nothing to record.")
@@ -447,6 +492,201 @@ def test_adr_that_reuses_number_one_fails():
     assert any("ADR files 0002" in f for f in BY_NAME["design-record-adr"].check(s))
 
 
+def test_adr_with_an_em_dash_heading_fails():
+    s = expected("design-record-adr")
+    s = replace(s, demo_files={**s.demo_files, ADR: s.demo_files[ADR].replace("ADR-0002:", "ADR-0002 \u2014", 1)})
+    fails = BY_NAME["design-record-adr"].check(s)
+    assert any("heading" in f for f in fails) and any("em-dash" in f for f in fails)
+
+
+def test_needs_adr_without_the_directive_fails():
+    s = expected("design-record-adr")
+    assert any("directive" in f for f in BY_NAME["design-record-adr-needs"].check(s))
+
+
+def test_needs_adr_without_the_decision_type_fails():
+    s = expected("design-record-adr-needs")
+    toml = s.demo_files["ubproject.toml"].replace('directive = "decision"', 'directive = "spec"')
+    fails = BY_NAME["design-record-adr-needs"].check(replace(s, demo_files={**s.demo_files, "ubproject.toml": toml}))
+    assert any("`decision` type" in f for f in fails)
+
+
+def test_needs_adr_with_a_changed_id_regex_fails():
+    s = expected("design-record-adr-needs")
+    toml = s.demo_files["ubproject.toml"].replace("{5,}", "{3,}")
+    fails = BY_NAME["design-record-adr-needs"].check(replace(s, demo_files={**s.demo_files, "ubproject.toml": toml}))
+    assert any("id_regex" in f for f in fails)
+
+
+def test_needs_adr_with_adr_one_unconverted_fails():
+    s = expected("design-record-adr-needs")
+    fails = BY_NAME["design-record-adr-needs"].check(
+        replace(s, demo_files={**s.demo_files, ADR_ONE: "# ADR-0001: The sync job runs from cron\n"}))
+    assert any("ADR-0001" in f for f in fails)
+
+
+def test_setup_needs_switch_writes_the_toml_and_the_colon_heading(tmp_path):
+    from evals.cases import setup_needs_switch
+    from evals.fixture import IDENTITY
+    remote, demo = tmp_path / "remote.git", tmp_path / "demo"
+    subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+    subprocess.run(["git", "clone", "-q", str(remote), str(demo)], check=True, capture_output=True)
+    subprocess.run(["git", "checkout", "-q", "-b", "develop"], cwd=demo, check=True)
+    adr = demo / ADR_ONE
+    adr.parent.mkdir(parents=True)
+    adr.write_text("# ADR-0001 \u2014 The sync job runs from cron\n\nbody\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=demo, check=True)
+    subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "init"], cwd=demo, check=True)
+    subprocess.run(["git", "push", "-q", "origin", "develop"], cwd=demo, check=True)
+    setup_needs_switch(demo)
+    assert (demo / "ubproject.toml").read_text(encoding="utf-8") == NEEDS_UBPROJECT
+    assert [t["directive"] for t in tomllib.loads(NEEDS_UBPROJECT)["needs"]["types"]] == ["req"]
+    assert adr.read_text(encoding="utf-8").startswith("# ADR-0001: The sync job runs from cron\n")
+    assert subprocess.run(["git", "status", "--porcelain"], cwd=demo, capture_output=True, text=True).stdout == ""
+    assert subprocess.run(["git", "rev-parse", "HEAD"], cwd=demo, capture_output=True, text=True).stdout == \
+        subprocess.run(["git", "rev-parse", "origin/develop"], cwd=demo, capture_output=True, text=True).stdout
+
+
+def with_file(s: State, path: str, text: str) -> State:
+    return replace(s, demo_files={**s.demo_files, path: text})
+
+
+def test_refused_needs_adr_with_a_rewritten_id_regex_fails():
+    s = expected("design-record-adr-needs-refused")
+    fails = BY_NAME["design-record-adr-needs-refused"].check(
+        with_file(s, "ubproject.toml", REFUSING_UBPROJECT.replace("^REQ_", "^ADR-")))
+    assert any("ubproject.toml changed" in f for f in fails)
+
+
+def test_refused_needs_adr_with_a_directive_fails():
+    s = expected("design-record-adr-needs-refused")
+    fails = BY_NAME["design-record-adr-needs-refused"].check(with_file(s, ADR, "```{decision} T\n:id: ADR-0002\n```\n"))
+    assert any("directive" in f for f in fails)
+
+
+def test_refused_needs_adr_without_the_refusal_in_the_answer_fails():
+    s = replace(expected("design-record-adr-needs-refused"), output="Done, ADR-0002 written.")
+    assert any("id_regex" in f for f in BY_NAME["design-record-adr-needs-refused"].check(s))
+
+
+def test_setup_needs_refused_writes_the_rejecting_id_regex(tmp_path, monkeypatch):
+    import evals.cases as cases
+    seen = []
+    monkeypatch.setattr(cases, "setup_needs_switch", lambda demo, ubproject: seen.append(ubproject))
+    cases.setup_needs_refused(tmp_path)
+    assert seen == [REFUSING_UBPROJECT] and "^REQ_" in REFUSING_UBPROJECT
+    # it declares a repository type, so the migration refuses for the id_regex only
+    assert [t["directive"] for t in tomllib.loads(REFUSING_UBPROJECT)["needs"]["types"]] == ["req"]
+
+
+def test_convert_that_writes_a_new_adr_fails():
+    s = expected("design-record-convert-needs")
+    fails = BY_NAME["design-record-convert-needs"].check(with_file(s, ADR, "# ADR-0002: x\n"))
+    assert any("new ADR" in f for f in fails)
+
+
+def test_convert_with_adr_one_unconverted_fails():
+    s = expected("design-record-convert-needs")
+    fails = BY_NAME["design-record-convert-needs"].check(with_file(s, ADR_ONE, ADR_ONE_ORIGINAL))
+    assert any("ADR-0001 not converted" in f for f in fails)
+
+
+def test_convert_without_the_declarations_fails():
+    s = expected("design-record-convert-needs")
+    fails = BY_NAME["design-record-convert-needs"].check(with_file(s, "ubproject.toml", NEEDS_UBPROJECT))
+    assert any("`decision` type" in f for f in fails) and any("`constrains` link" in f for f in fails)
+
+
+NEW_ADR = "docs/adr/0002-the-monthly-full-re-sync-runs-from-a-systemd-timer.md"
+
+
+@pytest.mark.parametrize("path,old,new,message", [
+    (NEW_ADR, "**Narrows**: [ADR-0001]", "**Replaces**: [ADR-0001]", "no `**Narrows**"),
+    (NEW_ADR, "ADR-0002: The", "ADR-0002 \u2014 The", "heading"),
+    (NEW_ADR, "**Related**: [DEMO-001](../backlog/demo-001.md)\n", "", "not below `**Related**`"),
+    (ADR_ONE, "Accepted, narrowed by", "Accepted, see", "ADR-0001 lacks"),
+    (ADR_ONE, "## Decision\n\nThe sync job", "## Decision\n\nThe full sync job", "body changed"),
+    ("docs/adr/README.md", "Accepted, narrowed by ADR-0002", "Accepted", "index row"),
+])
+def test_narrow_with_a_broken_end_state_fails(path, old, new, message):
+    s = expected("design-record-narrow")
+    fails = BY_NAME["design-record-narrow"].check(with_file(s, path, s.demo_files[path].replace(old, new, 1)))
+    assert any(message in f for f in fails), fails
+
+
+def test_narrow_without_the_new_adr_fails():
+    s = expected("design-record-narrow")
+    s = replace(s, demo_files={k: v for k, v in s.demo_files.items() if k != NEW_ADR})
+    assert any("ADR files 0002" in f for f in BY_NAME["design-record-narrow"].check(s))
+
+
+def test_setup_needs_converted_leaves_a_converted_adr_and_the_declarations(tmp_path):
+    from evals.cases import setup_needs_converted
+    from evals.fixture import IDENTITY
+    remote, demo = tmp_path / "remote.git", tmp_path / "demo"
+    subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+    subprocess.run(["git", "clone", "-q", str(remote), str(demo)], check=True, capture_output=True)
+    subprocess.run(["git", "checkout", "-q", "-b", "develop"], cwd=demo, check=True)
+    adr = demo / ADR_ONE
+    adr.parent.mkdir(parents=True)
+    adr.write_text(ADR_ONE_ORIGINAL, encoding="utf-8", newline="\n")
+    (adr.parent / "README.md").write_text(
+        "| ADR | Title | Status | Date |\n|---|---|---|---|\n"
+        "| [0001](0001-the-sync-job-runs-from-cron.md) | The sync job runs from cron | Accepted | 2026-09-01 |\n\n## Notes\n",
+        encoding="utf-8", newline="\n")
+    subprocess.run(["git", "add", "."], cwd=demo, check=True)
+    subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "init"], cwd=demo, check=True)
+    subprocess.run(["git", "push", "-q", "origin", "develop"], cwd=demo, check=True)
+    setup_needs_converted(demo)
+    assert adr.read_text(encoding="utf-8") == ADR_ONE_CONVERTED
+    assert (demo / ADR_TWO).read_text(encoding="utf-8") == ADR_TWO_STALE
+    assert ":status: Proposed" in ADR_TWO_STALE and "**Status**: Accepted" in ADR_TWO_STALE
+    index = (demo / "docs/adr/README.md").read_text(encoding="utf-8").splitlines()
+    assert index.index(ADR_TWO_ROW.rstrip("\n")) == index.index(next(r for r in index if r.startswith("| [0001]"))) + 1
+    needs = tomllib.loads((demo / "ubproject.toml").read_text(encoding="utf-8"))["needs"]
+    assert [t["directive"] for t in needs["types"]] == ["req", "decision"]
+    assert needs["links"]["constrains"]["outgoing"] == "constrains"
+    assert subprocess.run(["git", "status", "--porcelain"], cwd=demo, capture_output=True, text=True).stdout == ""
+    assert subprocess.run(["git", "rev-parse", "HEAD"], cwd=demo, capture_output=True, text=True).stdout == \
+        subprocess.run(["git", "rev-parse", "origin/develop"], cwd=demo, capture_output=True, text=True).stdout
+
+
+@pytest.mark.parametrize("path,old,new,message", [
+    (ADR_ONE, ":status: Superseded", ":status: Accepted", "still says `:status: Accepted`"),
+    (ADR_ONE, ":status: Superseded", ":status: Rejected", "lacks `:status: Superseded`"),
+    (ADR_ONE, "**Status**: Superseded by", "**Status**: Replaced by", "ADR-0001 lacks"),
+    (ADR_ONE, "```{decision} The sync job runs from cron\n:id: ADR-0001\n", "", "lost its `decision` need"),
+    (ADR_ONE, "## Decision\n\nThe sync job", "## Decision\n\nThe full sync job", "body changed"),
+    (SUPERSEDING_ADR, ":status: Accepted", ":status: Proposed", "lacks `:status: Accepted`"),
+    (SUPERSEDING_ADR, "```{decision} The sync job runs as a long-running worker\n:id: ADR-0003\n:status: Accepted\n```\n\n",
+     "", "carries no `decision` need"),
+    (SUPERSEDING_ADR, "**Supersedes**: [ADR-0001]", "**Replaces**: [ADR-0001]", "no `**Supersedes**"),
+    (SUPERSEDING_ADR, "ADR-0003: The", "ADR-0003 \u2014 The", "heading"),
+    (ADR_TWO, ":status: Accepted", ":status: Proposed", "still lacks `:status: Accepted`"),
+    (ADR_TWO, ":status: Accepted", ":status: Superseded", "still lacks `:status: Accepted`"),
+    (ADR_TWO, "## Decision\n\nA failed", "## Decision\n\nEvery failed", "differs from its stale original"),
+    (ADR_TWO, "**Date**: 2026-09-10", "**Date**: 2026-11-09", "differs from its stale original"),
+    (ADR_TWO, "\n", "\r\n", "differs from its stale original"),
+])
+def test_supersede_needs_with_a_broken_end_state_fails(path, old, new, message):
+    s = expected("design-record-supersede-needs")
+    fails = BY_NAME["design-record-supersede-needs"].check(with_file(s, path, s.demo_files[path].replace(old, new, 1)))
+    assert any(message in f for f in fails), fails
+
+
+def test_supersede_needs_without_the_new_adr_fails():
+    s = expected("design-record-supersede-needs")
+    s = replace(s, demo_files={k: v for k, v in s.demo_files.items() if k != SUPERSEDING_ADR})
+    assert any("ADR files 0003" in f for f in BY_NAME["design-record-supersede-needs"].check(s))
+
+
+def test_supersede_needs_with_a_changed_id_regex_fails():
+    s = expected("design-record-supersede-needs")
+    fails = BY_NAME["design-record-supersede-needs"].check(
+        with_file(s, "ubproject.toml", NEEDS_UBPROJECT.replace("{5,}", "{3,}")))
+    assert any("id_regex" in f for f in fails)
+
+
 def test_adr_written_without_rationale_fails():
     s = replace(expected("design-record-asks"), demo_files={ADR: "# ADR-0002"}, demo_porcelain="?? docs/adr/\n")
     assert BY_NAME["design-record-asks"].check(s)
@@ -558,3 +798,10 @@ def test_hand_allocation_setup_changes_only_the_skill(tmp_path):
 def test_scripted_allocation_setup_adds_the_script_and_its_test(tmp_path):
     assert sorted(changed_files("rubric-passes-scripted-allocation", tmp_path)) == [
         "scripts/next_id.py", "skills/new-item/SKILL.md", "tests/test_next_id.py"]
+
+
+@pytest.mark.parametrize("name", ["design-record-adr-needs", "design-record-convert-needs",
+                                  "design-record-supersede-needs"])
+def test_needs_check_with_an_unparsable_ubproject_fails(name):
+    fails = BY_NAME[name].check(with_file(expected(name), "ubproject.toml", "[needs\n"))
+    assert any("ubproject.toml does not parse" in f for f in fails), fails
