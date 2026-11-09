@@ -39,6 +39,23 @@ jobs:
         continue-on-error: true
         run: uv run --group dev pytest -q --cov --cov-report=xml --junit-xml=junit.xml
 
+      - name: Install ubc
+        if: matrix.os == 'ubuntu-latest'
+        uses: useblocks/ubc-action@0422e463faa37e16f39d3d6eb21b15f9e3e060f9 # 0.1
+        with:
+          version: 0.39.0
+
+      # ubc says "No errors found" also when it sees no file, and exits 0 on warnings:
+      # count the ADRs it sees, and deny warnings.
+      - name: Check the migrated ADR fixture with ubc
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: tests/dev/adr/fixtures/needs-repo-migrated
+        run: |
+          ubc build list-documents
+          seen=$(ubc build list-documents | grep -c '^docs/adr/0') || true
+          [ "$seen" -eq 2 ] || { echo "::error::ubc sees $seen of the 2 ADRs"; exit 1; }
+          ubc check --deny warning
+
       - name: Upload coverage to Codecov
         if: always()
         uses: codecov/codecov-action@v5
