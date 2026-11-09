@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-085 — design-record's mechanical ADR steps run through a script](xas-085.md)
 - [XAS-084 — A backlog has no standing refinement item: a refinement commit names the item it refines](xas-084.md)
 - [XAS-083 — The closed loop spends its token budget on reviews, not on rebuilt context](xas-083.md)
 - [XAS-082 — backlog.py and board.py write no em-dash](xas-082.md)
