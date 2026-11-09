@@ -42,6 +42,40 @@ If `docs/adr/` does not exist, create it along with a `README.md` index.
     What follows from the decision — including the costs accepted and the
     cheap escape hatch if it turns out wrong. Not a list of benefits.
 
+## The need-shaped header
+
+Where the repository root holds a `ubproject.toml`, the repository builds its
+docs with sphinx-needs, and every ADR carries a `decision` need. That file is
+the switch; without it, ADRs keep the template above.
+
+The need sits between the heading and the bold-field lines:
+
+    # ADR-NNNN: Title in sentence case
+
+    ```{decision} Title in sentence case
+    :id: ADR-NNNN
+    :status: Accepted
+    ```
+
+    **Status**: Accepted
+    **Date**: YYYY-MM-DD
+    **Related**: [PREFIX-###](../backlog/prefix-###.md)
+
+- The directive's argument is the heading's title, the text after `ADR-NNNN: `.
+- `:status:` is the first word of the `**Status**` line, its links removed:
+  `Proposed`, `Accepted`, `Rejected` or `Superseded`.
+- The need's `:status:` follows the `**Status**` line: the migration rewrites it
+  where they differ, so a supersede or narrowing keeps the two in step.
+- The bold-field lines stay unchanged directly below the directive, so the
+  index and the log checks keep reading them.
+
+The script `adr.py migrate` writes this header, never an agent by hand. It
+converts every ADR not yet converted, brings the `:status:` of converted ADRs in
+step with their Status line, and declares
+the need type `decision` and the link type `constrains` in `ubproject.toml`.
+An ADR is always written in the template above first; the migration turns it
+into this shape.
+
 ## Record the decision, not the specification
 
 An ADR records **what was decided and why**. Anything that can change without

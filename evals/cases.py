@@ -9,13 +9,14 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import tomllib
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Callable
 
 from evals.board import BOARD_FILE, card, ids, jira_card
-from evals.fixture import IDENTITY, INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, JIRA_ISSUES, State, display_id
+from evals.fixture import FIXTURES, IDENTITY, INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, JIRA_ISSUES, State, display_id
 
 LOG_FILE = "engineering/log.md"
 HUB_FILE = "learnings/README.md"
@@ -310,6 +311,11 @@ def check_recall(s: State) -> list[str]:
             + expect("flaky" not in s.output.lower(), "names the unrelated note"))
 
 
+ADR_PROMPT = (
+    "record an ADR, it came out of DEMO-001 and we agreed on it: the sync job keeps its retry state in "
+    "SQLite. Context: two concurrent runs corrupted the JSON state file twice. Redis lost because it "
+    "adds a service to operate. A JSON file with a lock lost because the lock does not survive a crash. "
+    "The cost we accept: a schema migration on every change of the state format.")
 ADR_HEADINGS = ("## Context", "## Decision", "## Alternatives considered", "## Consequences")
 
 
@@ -318,11 +324,169 @@ def check_adr(s: State) -> list[str]:
     f = expect(len(adrs) == 1, f"ADR files 0002: {adrs}") + expect(not new_files(s, "docs/adr/0003-"), "a third ADR")
     if adrs:
         text = s.demo_files[adrs[0]]
+        first = text.splitlines()[0] if text else ""
+        f += expect(first.startswith("# ADR-0002: "), f"heading is not `# ADR-0002: <title>`: {first!r}")
+        f += expect("\u2014" not in first, "em-dash in the heading")
         f += expect("**Status**: Accepted" in text, "status not Accepted")
         f += expect(f"**Date**: {date.today().isoformat()}" in text, "date not today")
         f += expect(all(h in text for h in ADR_HEADINGS), "a section heading is missing")
         f += expect("Redis" in text and "demo-001.md" in text, "Redis or the DEMO-001 link missing")
         f += expect(adrs[0].split("/")[-1] in s.demo_files.get("docs/adr/README.md", ""), "not in the index")
+    return f + no_local_commit(s) + no_store_commit(s) + expect(not s.demo_remote_subjects, "demo remote changed")
+
+
+NEEDS_ID_REGEX = "^[A-Z0-9_-]{5,}"
+# The repository declares a need type of its own: a `decision` entry replaces sphinx-needs' default types
+# when none is declared, so the migration refuses a `ubproject.toml` without `needs.types`.
+NEEDS_TYPES = '\n[[needs.types]]\ndirective = "req"\ntitle = "Requirement"\nprefix = "REQ_"\n'
+NEEDS_UBPROJECT = f'[project]\nname = "demo"\n\n[needs]\nid_regex = "{NEEDS_ID_REGEX}"\n{NEEDS_TYPES}'
+ADR_ONE = "docs/adr/0001-the-sync-job-runs-from-cron.md"
+
+
+def check_adr_needs(s: State) -> list[str]:
+    """`check_adr`, plus: both ADRs are `decision` needs and `ubproject.toml` declares the type and link."""
+    f = check_adr(s)
+    adrs = new_files(s, "docs/adr/0002-")
+    if adrs:
+        text = s.demo_files[adrs[0]]
+        title = text.splitlines()[0].removeprefix("# ADR-0002: ") if text else ""
+        lines = text.splitlines()
+        f += expect(f"```{{decision}} {title}" in lines, f"no `{{decision}}` directive with the title {title!r}")
+        f += expect(":id: ADR-0002" in lines, "no `:id: ADR-0002`")
+        f += expect(":status: Accepted" in lines, "no `:status: Accepted`")
+    one_lines = s.demo_files.get(ADR_ONE, "").splitlines()
+    f += expect("```{decision} The sync job runs from cron" in one_lines and ":id: ADR-0001" in one_lines,
+                "ADR-0001 not converted to a `decision` need")
+    try:
+        cfg = tomllib.loads(s.demo_files.get("ubproject.toml", ""))
+    except tomllib.TOMLDecodeError as e:
+        return f + [f"ubproject.toml does not parse: {e}"]
+    needs = cfg.get("needs", {})
+    f += expect(any(t.get("directive") == "decision" for t in needs.get("types", [])),
+                "ubproject.toml declares no `decision` type")
+    f += expect(needs.get("links", {}).get("constrains", {}).get("outgoing") == "constrains",
+                "ubproject.toml declares no `constrains` link")
+    f += expect(needs.get("id_regex") == NEEDS_ID_REGEX, "id_regex of ubproject.toml changed")
+    return f
+
+
+REFUSING_UBPROJECT = f'[project]\nname = "demo"\n\n[needs]\nid_regex = "^REQ_"\n{NEEDS_TYPES}'
+
+
+def check_adr_needs_refused(s: State) -> list[str]:
+    """The repo's `id_regex` rejects `ADR-0001`: the migration refuses, `ubproject.toml` stays as the
+    user wrote it, no ADR becomes a need, and the answer shows the refusal."""
+    adrs = [p for p in s.demo_files if p.startswith("docs/adr/") and p.endswith(".md")]
+    return (expect(s.demo_files.get("ubproject.toml") == REFUSING_UBPROJECT, "ubproject.toml changed")
+            + expect(not any("{decision}" in s.demo_files[p] for p in adrs), "an ADR carries a `{decision}` directive")
+            + expect("id_regex" in s.output, "the answer does not name `id_regex`")
+            + no_local_commit(s) + no_store_commit(s) + expect(not s.demo_remote_subjects, "demo remote changed"))
+
+
+def check_convert_needs(s: State) -> list[str]:
+    """"convert the ADRs to needs": ADR-0001 becomes a need, the type and link are declared, no new ADR."""
+    f = expect(not new_files(s, "docs/adr/0002-"), "wrote a new ADR")
+    one = s.demo_files.get(ADR_ONE, "").splitlines()
+    f += expect("```{decision} The sync job runs from cron" in one and ":id: ADR-0001" in one and ":status: Accepted" in one,
+                "ADR-0001 not converted to a `decision` need with its id and status")
+    try:
+        cfg = tomllib.loads(s.demo_files.get("ubproject.toml", ""))
+    except tomllib.TOMLDecodeError as e:
+        return f + [f"ubproject.toml does not parse: {e}"]
+    needs = cfg.get("needs", {})
+    f += expect(any(t.get("directive") == "decision" for t in needs.get("types", [])),
+                "ubproject.toml declares no `decision` type")
+    f += expect(needs.get("links", {}).get("constrains", {}).get("outgoing") == "constrains",
+                "ubproject.toml declares no `constrains` link")
+    return f + no_local_commit(s) + no_store_commit(s) + expect(not s.demo_remote_subjects, "demo remote changed")
+
+
+NARROW_PROMPT = (
+    "record an ADR, it came out of DEMO-001: ADR-0001 stays in force, except for the monthly full "
+    "re-sync, which now runs from a systemd timer on the batch host. Context: the full re-sync takes "
+    "three hours, and the lock file of the cron job made every hourly run behind it skip. Keeping it in "
+    "cron lost because the hourly syncs stay blocked for those three hours. A Kubernetes CronJob lost "
+    "because we run no cluster. The cost we accept: two schedulers to operate.")
+ADR_ONE_ORIGINAL = (FIXTURES / "demo" / ADR_ONE).read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
+def check_narrow(s: State) -> list[str]:
+    """The new ADR narrows ADR-0001; ADR-0001 says so in its Status line and nothing else changes."""
+    adrs = new_files(s, "docs/adr/0002-")
+    f = expect(len(adrs) == 1, f"ADR files 0002: {adrs}") + expect(not new_files(s, "docs/adr/0003-"), "a third ADR")
+    one_name = ADR_ONE.split("/")[-1]
+    if adrs:
+        name = adrs[0].split("/")[-1]
+        lines = s.demo_files[adrs[0]].splitlines()
+        f += expect(bool(lines) and lines[0].startswith("# ADR-0002: ") and "\u2014" not in lines[0],
+                    f"heading is not `# ADR-0002: <title>` without an em-dash: {lines[:1]}")
+        related = [i for i, line in enumerate(lines) if line.startswith("**Related**")]
+        narrows = [i for i, line in enumerate(lines) if line.startswith(f"**Narrows**: [ADR-0001]({one_name})")]
+        f += expect(bool(narrows), f"no `**Narrows**: [ADR-0001]({one_name})` line")
+        f += expect(bool(related) and bool(narrows) and narrows[0] > related[0], "`**Narrows**` is not below `**Related**`")
+        status_line = f"**Status**: Accepted, narrowed by [ADR-0002]({name})"
+        f += expect(status_line in s.demo_files.get(ADR_ONE, "").splitlines(), f"ADR-0001 lacks `{status_line}`")
+        rows = [r for r in s.demo_files.get("docs/adr/README.md", "").splitlines() if one_name in r]
+        f += expect(len(rows) == 1 and "narrowed by" in rows[0], f"index row of ADR-0001: {rows}")
+    body = lambda text: text.partition("\n## Context")[2]
+    f += expect(body(s.demo_files.get(ADR_ONE, "")) == body(ADR_ONE_ORIGINAL) != "", "ADR-0001's body changed")
+    return f + no_local_commit(s) + no_store_commit(s) + expect(not s.demo_remote_subjects, "demo remote changed")
+
+
+ADR_TWO = "docs/adr/0002-failed-pages-are-retried-three-times.md"
+# ADR-0002 as the setup leaves it: a converted ADR whose need is stale (`Proposed`) while its Status line says `Accepted`.
+ADR_TWO_STALE = (
+    "# ADR-0002: Failed pages are retried three times\n\n"
+    "```{decision} Failed pages are retried three times\n:id: ADR-0002\n:status: Proposed\n```\n\n"
+    "**Status**: Accepted\n**Date**: 2026-09-10\n\n## Context\n\n"
+    "The upstream API fails single pages now and then.\n\n## Decision\n\n"
+    "A failed page is retried three times before the run reports it.\n\n## Consequences\n\n"
+    "A run with a broken page takes three attempts longer.\n")
+ADR_TWO_ROW = "| [0002](0002-failed-pages-are-retried-three-times.md) | Failed pages are retried three times | Accepted | 2026-09-10 |\n"
+SUPERSEDE_PROMPT = (
+    "record an ADR, it came out of DEMO-001 and we agreed on it: the sync job no longer runs from cron, "
+    "it runs as a long-running worker with its own timer. This supersedes ADR-0001. Context: the worker "
+    "can run a full sync of three hours without blocking the hourly runs. Keeping cron lost because its "
+    "lock file made every hourly run behind a long sync skip. A Kubernetes CronJob lost because we run "
+    "no cluster. The cost we accept: a process that must be kept alive and monitored.")
+
+
+def check_supersede_needs(s: State) -> list[str]:
+    """ADR-0001 is a converted need: the new ADR-0003 supersedes it, its Status line says so, and its need's
+    `:status:` follows. ADR-0002 is a converted ADR with a stale need (`Proposed` against an `Accepted` Status
+    line): its need ends `Accepted`, the author's decision in its Status line, and nothing else of it changes.
+    End states only: how the skill got there is not checked."""
+    adrs = new_files(s, "docs/adr/0003-")
+    f = expect(len(adrs) == 1, f"ADR files 0003: {adrs}") + expect(not new_files(s, "docs/adr/0004-"), "a fourth ADR")
+    one_name = ADR_ONE.split("/")[-1]
+    one = s.demo_files.get(ADR_ONE, "").splitlines()
+    if adrs:
+        name = adrs[0].split("/")[-1]
+        lines = s.demo_files[adrs[0]].splitlines()
+        f += expect(bool(lines) and lines[0].startswith("# ADR-0003: ") and "\u2014" not in lines[0],
+                    f"heading is not `# ADR-0003: <title>` without an em-dash: {lines[:1]}")
+        f += expect(any(line.startswith("```{decision} ") for line in lines) and ":id: ADR-0003" in lines,
+                    "ADR-0003 carries no `decision` need with `:id: ADR-0003`")
+        f += expect(":status: Accepted" in lines, "the need of ADR-0003 lacks `:status: Accepted`")
+        f += expect(any(line.startswith(f"**Supersedes**: [ADR-0001]({one_name})") for line in lines),
+                    f"no `**Supersedes**: [ADR-0001]({one_name})` line")
+        status_line = f"**Status**: Superseded by [ADR-0003]({name})"
+        f += expect(status_line in one, f"ADR-0001 lacks `{status_line}`")
+    f += expect(":status: Superseded" in one, "the need of ADR-0001 lacks `:status: Superseded`")
+    f += expect(":status: Accepted" not in one, "the need of ADR-0001 still says `:status: Accepted`")
+    f += expect("```{decision} The sync job runs from cron" in one and ":id: ADR-0001" in one,
+                "ADR-0001 lost its `decision` need")
+    body = lambda text: text.partition("\n## Context")[2]
+    f += expect(body(s.demo_files.get(ADR_ONE, "")) == body(ADR_ONE_ORIGINAL) != "", "ADR-0001's body changed")
+    two = s.demo_files.get(ADR_TWO, "")
+    f += expect(":status: Accepted" in two.splitlines(), "the need of ADR-0002 still lacks `:status: Accepted`")
+    f += expect(two == ADR_TWO_STALE.replace(":status: Proposed", ":status: Accepted", 1),
+                "ADR-0002 differs from its stale original in more than the need's status")
+    try:
+        needs = tomllib.loads(s.demo_files.get("ubproject.toml", "")).get("needs", {})
+    except tomllib.TOMLDecodeError as e:
+        return f + [f"ubproject.toml does not parse: {e}"]
+    f += expect(needs.get("id_regex") == NEEDS_ID_REGEX, "id_regex of ubproject.toml changed")
     return f + no_local_commit(s) + no_store_commit(s) + expect(not s.demo_remote_subjects, "demo remote changed")
 
 
@@ -379,6 +543,45 @@ def setup_gate(demo: Path, gate_exit: int = 0) -> None:
     subprocess.run(["git", "add", "--chmod=+x", "scripts/gate"], cwd=demo, check=True)
     subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "chore: add the gate"], cwd=demo, check=True)
     subprocess.run(["git", "push", "-q", "origin", "develop"], cwd=demo, check=True)
+
+
+def setup_needs_switch(demo: Path, ubproject: str = NEEDS_UBPROJECT) -> None:
+    """A root `ubproject.toml` and ADR-0001 under a colon heading, committed on develop and pushed:
+    the repo has just switched to sphinx-needs, and its ADR headers are not needs yet."""
+    (demo / "ubproject.toml").write_text(ubproject, encoding="utf-8", newline="\n")
+    adr = demo / ADR_ONE
+    text = adr.read_text(encoding="utf-8")
+    adr.write_text(text.replace("# ADR-0001 \u2014 ", "# ADR-0001: ", 1), encoding="utf-8", newline="\n")
+    subprocess.run(["git", "add", "ubproject.toml", ADR_ONE], cwd=demo, check=True)
+    subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "chore: switch to sphinx-needs"], cwd=demo, check=True)
+    subprocess.run(["git", "push", "-q", "origin", "develop"], cwd=demo, check=True)
+
+
+def setup_needs_converted(demo: Path) -> None:
+    """`setup_needs_switch`, then the migration done by hand: ADR-0001 carries its `decision` need
+    (`:status: Accepted`), `ubproject.toml` declares the `decision` type and the `constrains` link, and
+    ADR-0002 is a converted ADR with a stale need (`ADR_TWO_STALE`), listed in the index."""
+    setup_needs_switch(demo)
+    toml = demo / "ubproject.toml"
+    toml.write_text(NEEDS_UBPROJECT + '\n[[needs.types]]\ndirective = "decision"\ntitle = "Decision"\nprefix = "ADR-"\n'
+                    '\n[needs.links.constrains]\nincoming = "is constrained by"\noutgoing = "constrains"\n',
+                    encoding="utf-8", newline="\n")
+    adr = demo / ADR_ONE
+    need = "```{decision} The sync job runs from cron\n:id: ADR-0001\n:status: Accepted\n```\n\n"
+    adr.write_text(adr.read_text(encoding="utf-8").replace("\n\n**Status**", f"\n\n{need}**Status**", 1),
+                   encoding="utf-8", newline="\n")
+    (demo / ADR_TWO).write_text(ADR_TWO_STALE, encoding="utf-8", newline="\n")
+    index = demo / "docs/adr/README.md"
+    index.write_text(index.read_text(encoding="utf-8").replace(
+        "| 2026-09-01 |\n", f"| 2026-09-01 |\n{ADR_TWO_ROW}", 1), encoding="utf-8", newline="\n")
+    subprocess.run(["git", "add", "ubproject.toml", ADR_ONE, ADR_TWO, "docs/adr/README.md"], cwd=demo, check=True)
+    subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "chore: convert the ADR headers to needs"], cwd=demo, check=True)
+    subprocess.run(["git", "push", "-q", "origin", "develop"], cwd=demo, check=True)
+
+
+def setup_needs_refused(demo: Path) -> None:
+    """`setup_needs_switch` with an `id_regex` that rejects `ADR-0001`."""
+    setup_needs_switch(demo, REFUSING_UBPROJECT)
 
 
 def setup_loop_at_gate(demo: Path, gate_exit: int) -> None:
@@ -715,11 +918,15 @@ CASES = [
          "turns one outage into many.\" It outlives this repo, no repo owns it, and knowing it would have "
          "saved me last week's incident.", check_capture, learnings=True),
     Case("learnings-recall", "learnings", "what do I know about git archive?", check_recall, learnings=True),
-    Case("design-record-adr", "design-record",
-         "record an ADR, it came out of DEMO-001 and we agreed on it: the sync job keeps its retry state in "
-         "SQLite. Context: two concurrent runs corrupted the JSON state file twice. Redis lost because it "
-         "adds a service to operate. A JSON file with a lock lost because the lock does not survive a crash. "
-         "The cost we accept: a schema migration on every change of the state format.", check_adr),
+    Case("design-record-adr", "design-record", ADR_PROMPT, check_adr),
+    Case("design-record-adr-needs", "design-record", ADR_PROMPT, check_adr_needs, setup=setup_needs_switch),
+    Case("design-record-adr-needs-refused", "design-record", ADR_PROMPT, check_adr_needs_refused,
+         setup=setup_needs_refused),
+    Case("design-record-convert-needs", "design-record", "convert the ADRs to needs", check_convert_needs,
+         setup=setup_needs_switch),
+    Case("design-record-supersede-needs", "design-record", SUPERSEDE_PROMPT, check_supersede_needs,
+         setup=setup_needs_converted),
+    Case("design-record-narrow", "design-record", NARROW_PROMPT, check_narrow),
     Case("design-record-declines", "design-record", "record an ADR: we renamed the local variable cnt to count in src/sync/",
          check_adr_declined),
     Case("design-record-asks", "design-record", "record an ADR: we chose SQLite over Redis for the retry state",
