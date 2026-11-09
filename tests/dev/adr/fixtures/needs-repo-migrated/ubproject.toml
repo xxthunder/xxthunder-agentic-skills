@@ -1,0 +1,23 @@
+[project]
+name = "needs-repo"
+
+# ubc reads only *.rst unless a Markdown parser is declared; MyST reads the need directives.
+[parse.parsers.md]
+flavour = "myst"
+
+[needs]
+id_required = true
+id_regex = "^[A-Z0-9_-]{5,}"
+
+[[needs.types]]
+directive = "req"
+title = "Requirement"
+prefix = "REQ_"
+[[needs.types]]
+directive = "decision"
+title = "Decision"
+prefix = "ADR-"
+
+[needs.links.constrains]
+incoming = "is constrained by"
+outgoing = "constrains"
