@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-086 — The pre-push gate's tests never write into the pushing repository](xas-086.md)
 - [XAS-085 — design-record's mechanical ADR steps run through a script](xas-085.md)
 - [XAS-084 — A backlog has no standing refinement item: a refinement commit names the item it refines](xas-084.md)
 - [XAS-083 — The closed loop spends its token budget on reviews, not on rebuilt context](xas-083.md)
