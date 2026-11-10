@@ -296,6 +296,49 @@ def test_pytest_gets_no_stdin(monkeypatch):
     assert seen["stdin"] is subprocess.DEVNULL  # the pre-push hook's ref lines on stdin stay for the gate
 
 
+def test_pytest_gets_no_git_variables(monkeypatch):
+    # git exports GIT_DIR and friends to hooks; pytest's own git calls must not inherit them (XAS-079).
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX"):
+        monkeypatch.setenv(name, "/somewhere")
+    monkeypatch.setenv("KEEP_ME", "1")
+    seen = {}
+    monkeypatch.setattr(gate.subprocess, "run", lambda cmd, **kw: seen.update(kw) or subprocess.CompletedProcess(cmd, 0))
+    assert gate.tests_pass()
+    assert not [k for k in seen["env"] if k.startswith("GIT_")]
+    assert seen["env"]["KEEP_ME"] == "1"
+
+
+def test_tests_from_a_worktree_hook_stay_out_of_the_pushing_repository(tmp_path, monkeypatch):
+    """The gate's test run, started by the pre-push hook in a worktree, leaves the real repository as it was."""
+    real = tmp_path / "real"
+    real.mkdir()
+    git(real, "init", "-q", "-b", "develop")
+    git(real, "config", "user.name", "owner")
+    git(real, "config", "user.email", "owner@example.invalid")
+    (real / "README.md").write_text("# real\n", encoding="utf-8")
+    commit(real, "base")
+    git(real, "worktree", "add", "-q", "-b", "feature", str(tmp_path / "wt"))
+    before = (git(real, "for-each-ref"), (real / ".git" / "config").read_text(encoding="utf-8"))
+    # What git exports to a hook run from a worktree: an absolute GIT_DIR into the real repository.
+    monkeypatch.setenv("GIT_DIR", str(real / ".git" / "worktrees" / "wt"))
+    monkeypatch.chdir(tmp_path / "wt")
+    run = subprocess.run  # gate.subprocess is this module's subprocess: keep the real run for the stub
+
+    def a_test_that_builds_its_own_repo(cmd, **kw):
+        # Stands in for pytest: a test that makes a repository in its tmp_path, as tests/evals do.
+        demo = tmp_path / "demo"
+        demo.mkdir()
+        for args in (["init", "-q", "-b", "develop"], ["config", "user.name", "t"], ["config", "user.email", "t@t"],
+                     ["commit", "-q", "--allow-empty", "-m", "init"], ["checkout", "-q", "-b", "feature/DEMO-007"]):
+            run(["git", *args], cwd=demo, env=kw.get("env"), capture_output=True)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(gate.subprocess, "run", a_test_that_builds_its_own_repo)
+    assert gate.tests_pass()
+    monkeypatch.undo()
+    assert (git(real, "for-each-ref"), (real / ".git" / "config").read_text(encoding="utf-8")) == before
+
+
 def test_touched_skills_counts_only_the_covered_plugin():
     paths = [f"{PLUGIN}/skills/next/references/x.md", f"{PLUGIN}/skills/logbook/SKILL.md",
              "plugins/xxthunder-paperless-skills/skills/scan/SKILL.md", f"{PLUGIN}/scripts/a.py", "README.md"]

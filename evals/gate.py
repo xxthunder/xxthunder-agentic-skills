@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -135,7 +136,11 @@ def check(repo: Path, head: str, out_root: str | None = None) -> list[str]:
 
 def tests_pass() -> bool:
     # No stdin: it holds the pre-push hook's ref lines, which the gate reads after pytest.
-    return subprocess.run([sys.executable, "-m", "pytest", "-q"], cwd=REPO_ROOT, stdin=subprocess.DEVNULL).returncode == 0
+    # No GIT_* variables: git exports GIT_DIR to hooks, absolute from a worktree, and the tests'
+    # own git calls would then act on the pushing repository instead of their tmp_path ones (XAS-079).
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    return subprocess.run([sys.executable, "-m", "pytest", "-q"], cwd=REPO_ROOT, stdin=subprocess.DEVNULL,
+                          env=env).returncode == 0
 
 
 def main(argv: list[str] | None = None) -> int:
