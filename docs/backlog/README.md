@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-088 — XAS-044b's deferred review findings](xas-088.md)
 - [XAS-087 — Gitea hosts the closed loop's pull request and checks](xas-087.md)
 - [XAS-085 — design-record's mechanical ADR steps run through a script](xas-085.md)
 - [XAS-084 — A backlog has no standing refinement item: a refinement commit names the item it refines](xas-084.md)
