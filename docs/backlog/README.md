@@ -16,7 +16,6 @@
 - [XAS-082 — backlog.py and board.py write no em-dash](xas-082.md)
 - [XAS-081 — The evidence package summarises the change and the gate as the contract says](xas-081.md)
 - [XAS-080 — The closed loop runs its scripts where the repository's commands run](xas-080.md)
-- [XAS-079 — The pre-push gate keeps its tests out of the real repository when pushed from a worktree](xas-079.md)
 - [XAS-078 — board.py polish from the XAS-060 reviews](xas-078.md)
 - [XAS-077 — The ADR log can record that a decision amends part of an earlier one](xas-077.md)
 - [XAS-076 — The skills' remaining registry lookups go through one script](xas-076.md)
@@ -59,6 +58,7 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
+- [XAS-079 — The pre-push gate keeps its tests out of the real repository when pushed from a worktree](xas-079.md)
 - [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
 - [XAS-044b — ADR headers as needs](xas-044b.md)
 - [XAS-044a — ADR: requirements become a binding design artifact where sphinx-needs is in use](xas-044a.md)
