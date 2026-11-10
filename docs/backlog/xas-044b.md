@@ -1,6 +1,6 @@
-# [XAS-044b] ADR headers as needs
+# [XAS-044b] ✅ DONE - ADR headers as needs
 
-**Status**: In Progress
+**Status**: Done (2026-11-10)
 **Priority**: Medium
 **Component**: `plugins/xxthunder-dev-skills/skills/design-record/` (ADR header, migration), `tests/`
 **Depends on**: [XAS-044a](xas-044a.md)
@@ -36,9 +36,9 @@ Backlog items keep their format: they are history, not product knowledge (XAS-04
 - **Loop rulings** (closed loop, 2026-11-08 and 2026-11-09; the agent's call, not discussed): the need carries only `:id:` and `:status:`, no `:constrains:`; linking requirements is the consuming repository's work. A missing `id_regex` counts as sphinx-needs' default `^[A-Z0-9_]{5,}`, which rejects `ADR-0001`, so the migration refuses it. `design-record` always writes the bold-field template and then runs the migration; there is no second template. The dev group pins `sphinx-needs>=9.2.0`, the release `ubc` 0.39.0 is built against.
 
 **Acceptance Criteria**:
-- [ ] `design-record` specifies the need-shaped ADR header, the switch and the migration
-- [ ] `design-record` writes need-shaped ADR headers where the switch is on, and the old format where it is off
-- [ ] The migration converts a fixture ADR log; a second run changes nothing
-- [ ] A migrated fixture builds with Sphinx `-W` and passes `ubc check` without findings
-- [ ] `design-record` specifies the status `Accepted, narrowed by ADR-NNNN`, and ADR-0001 carries it, pointing at ADR-0018
-- [ ] The plugin version is bumped (minor)
+- [x] `design-record` specifies the need-shaped ADR header, the switch and the migration
+- [x] `design-record` writes need-shaped ADR headers where the switch is on, and the old format where it is off
+- [x] The migration converts a fixture ADR log; a second run changes nothing
+- [x] A migrated fixture builds with Sphinx `-W` and passes `ubc check` without findings
+- [x] `design-record` specifies the status `Accepted, narrowed by ADR-NNNN`, and ADR-0001 carries it, pointing at ADR-0018
+- [x] The plugin version is bumped (minor)

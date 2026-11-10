@@ -59,9 +59,7 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
-- [XAS-079 — The pre-push gate keeps its tests out of the real repository when pushed from a worktree](xas-079.md)
 - [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
-- [XAS-044b — ADR headers as needs](xas-044b.md)
 - [XAS-044a — ADR: requirements become a binding design artifact where sphinx-needs is in use](xas-044a.md)
 - [XAS-044 — Requirements as a binding design artifact where sphinx-needs is in use](xas-044.md)
 - [XAS-027g — Verify in a consuming repo; retire the per-repo `AGENTS.md` text](xas-027g.md)
@@ -71,6 +69,7 @@
 - [XAS-001 — Backlog refinement](xas-001.md)
 
 ### Done
+- [XAS-079 — The pre-push gate keeps its tests out of the real repository when pushed from a worktree](xas-079.md)
 - [XAS-060 — A board move goes through a script, not through the agent's hand edit](xas-060.md)
 - [XAS-059 — The skill repo's rubric guides the loop's reviewer](xas-059.md)
 - [XAS-057 — Every `SKILL.md` frontmatter is checked by a test](xas-057.md)
@@ -83,6 +82,7 @@
 - [XAS-047 — Behavioural evals for the dev skills](xas-047.md)
 - [XAS-046 — Kanban as code: `next` shows a board, `backlog-ops` moves its cards](xas-046.md)
 - [XAS-045 — Store contracts may live in a file the store's `AGENTS.md` imports](xas-045.md)
+- [XAS-044b — ADR headers as needs](xas-044b.md)
 - [XAS-043 — `backlog.py` drops text after the link in a table-of-contents line](xas-043.md)
 - [XAS-042 — `next` does not report the standing refinement item](xas-042.md)
 - [XAS-041 — `backlog-ops` pull: In Progress lands on the default branch at once](xas-041.md)
