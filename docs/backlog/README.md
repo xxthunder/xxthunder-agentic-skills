@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-089 — The implementer commits its own change of a unit with commit-impl](xas-089.md)
 - [XAS-088 — XAS-044b's deferred review findings](xas-088.md)
 - [XAS-087 — Gitea hosts the closed loop's pull request and checks](xas-087.md)
 - [XAS-085 — design-record's mechanical ADR steps run through a script](xas-085.md)
