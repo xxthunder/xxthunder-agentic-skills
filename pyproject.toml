@@ -25,3 +25,4 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["plugins", "evals"]
+patch = ["subprocess"]  # scripts the tests run as subprocesses count too
