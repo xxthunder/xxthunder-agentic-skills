@@ -11,7 +11,7 @@
 ### Open
 - [XAS-089 — The implementer commits its own change of a unit with commit-impl](xas-089.md)
 - [XAS-088 — XAS-044b's deferred review findings](xas-088.md)
-- [XAS-087 — Gitea hosts the closed loop's pull request and checks](xas-087.md)
+- [XAS-087 — The closed loop talks to its host through one script, with backends for GitHub, Gitea and Bitbucket Server](xas-087.md)
 - [XAS-085 — design-record's mechanical ADR steps run through a script](xas-085.md)
 - [XAS-084 — A backlog has no standing refinement item: a refinement commit names the item it refines](xas-084.md)
 - [XAS-083 — The closed loop spends its token budget on reviews, not on rebuilt context](xas-083.md)
@@ -29,7 +29,6 @@
 - [XAS-070 — The closed loop takes a GitHub issue as its item](xas-070.md)
 - [XAS-069 — The gate runs its tests without the push hook's git environment](xas-069.md)
 - [XAS-068 — An eval case for the closed loop's CI-as-gate path](xas-068.md)
-- [XAS-067 — Bitbucket Server and Jenkins host the closed loop's pull request and checks](xas-067.md)
 - [XAS-066 — A script finds a loop's state across worktrees on resume](xas-066.md)
 - [XAS-065 — An eval case for the plan step and the guard after N.b](xas-065.md)
 - [XAS-064 — A pull of an item already In Progress still puts its card on the board](xas-064.md)
@@ -128,6 +127,9 @@
 - [XAS-006 — Phase 2 — Rename marketplace registry and update manifest descriptions](xas-006.md)
 - [XAS-005 — Phase 1 — Rename GitHub repo and update URL references](xas-005.md)
 - [XAS-002 — Rename repo and restructure as agentic-skills marketplace](xas-002.md)
+
+### Superseded
+- [XAS-067 — Bitbucket Server and Jenkins host the closed loop's pull request and checks](xas-067.md)
 
 ---
 
