@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-090 — The closed loop's GitHub checks wait for the pushed commit, and an eval covers the CI as the gate](xas-090.md)
 - [XAS-089 — The implementer commits its own change of a unit with commit-impl](xas-089.md)
 - [XAS-088 — XAS-044b's deferred review findings](xas-088.md)
 - [XAS-085 — design-record's mechanical ADR steps run through a script](xas-085.md)
