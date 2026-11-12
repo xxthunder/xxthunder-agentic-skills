@@ -42,6 +42,17 @@ not a branch in the worktree is exit 3. The tea flags follow tea's documentation
 repository's tests run a fake tea, not a real one. `checks` waits until the status has at
 least one entry and is no longer pending; green only on success.
 
+Bitbucket Server: the REST API (<profile url>/rest/api/1.0, `Authorization: Bearer <token>`,
+the profile's ca_bundle as CA file when set) does it all. The remote path, without a
+leading scm/, is <project>/<repo>; the project key keeps its case. `pr` looks up the open
+outgoing pull request at refs/heads/<head> (all pages) and updates its title and
+description with its version, or creates one from <head> into <base>; the URL is
+links.self[0].href. `checks` polls the build statuses (Jenkins' verdict) of <head> as the
+worktree has it, never the pull request's latestCommit; <head> not a branch in the
+worktree is exit 3. It waits until there is at least one status and none is INPROGRESS;
+green only when all are SUCCESSFUL. Each check is {"name": name or key, "state": the raw
+state}.
+
 A token is never printed, also not in an error message. Stdlib plus PyYAML; no shell, so
 it runs on Windows.
 """
@@ -53,14 +64,15 @@ import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Protocol
-from urllib.parse import urlparse
+from typing import Callable, Protocol
+from urllib.parse import quote, urlparse
 
 import yaml
 
@@ -174,6 +186,102 @@ class GitHub:
         raise self.error(message(out, f"gh pr checks failed with exit {out.returncode}"))
 
 
+# ---------- REST helpers (Gitea, Bitbucket) ----------
+
+
+class RestApi:
+    """JSON over HTTP with a token; every failure is a HostError that never holds the token.
+
+    `detail` pulls the server's message out of an error answer's JSON body.
+    """
+
+    def __init__(self, label: str, base: str, auth: str, detail: Callable[[dict], str],
+                 ca_bundle: str | None = None) -> None:
+        self.label = label
+        self.base = base.rstrip("/")
+        self.headers = {"Authorization": auth, "Accept": "application/json"}
+        self.detail = detail
+        self.context = None
+        if ca_bundle:
+            try:
+                self.context = ssl.create_default_context(cafile=ca_bundle)
+            except (OSError, ssl.SSLError) as e:
+                raise HostError(f"cannot load the CA bundle {ca_bundle}: {e}") from None
+
+    def call(self, method: str, path: str, payload: dict | None = None):
+        headers = dict(self.headers)
+        data = None
+        if payload is not None:
+            data = json.dumps(payload).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        request = urllib.request.Request(self.base + path, data=data, headers=headers,
+                                         method=method)
+        where = f"{self.label} API on {method} {path}"
+        try:
+            with urllib.request.urlopen(request, timeout=60, context=self.context) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            try:
+                detail = self.detail(json.loads(e.read().decode("utf-8")))
+            except (OSError, ValueError, AttributeError, TypeError, KeyError, IndexError):
+                detail = ""
+            raise HostError(f"{self.label} API {e.code} on {method} {path}: "
+                            f"{detail or e.reason}") from None
+        except urllib.error.URLError as e:
+            raise HostError(f"{where}: {e.reason}") from None
+        except (OSError, ValueError, http.client.HTTPException) as e:
+            raise HostError(f"{where}: {e}") from None
+
+
+def field(answer, *keys, where: str):
+    """answer[k1][k2]…; a missing field is a HostError naming it, not a traceback."""
+    value = answer
+    for key in keys:
+        if isinstance(value, dict) and key in value:
+            value = value[key]
+        elif isinstance(value, list) and isinstance(key, int) and -len(value) <= key < len(value):
+            value = value[key]
+        else:
+            raise HostError(f"{where} without {'.'.join(map(str, keys))}")
+    return value
+
+
+def read_body(body: str) -> str:
+    try:
+        return Path(body).read_text(encoding="utf-8")
+    except OSError as e:
+        raise HostError(f"cannot read the body file {body}: {e.strerror or e}") from None
+
+
+def head_sha(worktree: str, head: str) -> str:
+    """The commit to poll: <head> in the worktree, i.e. the pushed commit.
+
+    The host updates the pull request's head commit only some time after a push, so a stale
+    head with a final success would read green; so there is no fallback to it.
+    """
+    git = executable("git") or "git"
+    out = run(git, "-C", worktree, "rev-parse", "--verify", "--quiet", f"{head}^{{commit}}")
+    sha = out.stdout.strip()
+    if out.returncode != 0 or not sha:
+        raise HostError(f"{head} is not a branch in {worktree}: cannot tell which commit "
+                        f"to wait for")
+    return sha
+
+
+def wait_for(poll: Callable[[], tuple[bool, list[dict]] | None], head: str,
+             interval: float, timeout: float) -> tuple[bool, list[dict]]:
+    """Call `poll` until it gives a verdict (not None), at most `timeout` seconds."""
+    deadline = time.monotonic() + timeout
+    while True:
+        verdict = poll()
+        if verdict is not None:
+            return verdict
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise HostError(f"timed out after {timeout:g} s waiting for the checks on {head}")
+        time.sleep(min(interval, remaining))
+
+
 # ---------- Gitea ----------
 
 
@@ -184,44 +292,22 @@ class Gitea:
     def __init__(self, tea: str, login: dict, path: str) -> None:
         self.tea = tea
         self.login = str(login.get("name", ""))
-        self.token = str(login.get("token", ""))
-        self.api_base = str(login.get("url", "")).rstrip("/") + "/api/v1"
+        self.rest = RestApi("Gitea", str(login.get("url", "")).rstrip("/") + "/api/v1",
+                            f"token {login.get('token', '')}",
+                            lambda answer: answer.get("message", ""))
         self.repo = path
         self.where = ("--login", self.login, "--repo", self.repo)
 
-    def api(self, path: str):
-        request = urllib.request.Request(self.api_base + path, headers={
-            "Authorization": f"token {self.token}", "Accept": "application/json"})
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            try:
-                detail = json.loads(e.read().decode("utf-8")).get("message", "")
-            except (OSError, ValueError, AttributeError):
-                detail = ""
-            raise HostError(f"Gitea API {e.code} on GET {path}: {detail or e.reason}") from None
-        except urllib.error.URLError as e:
-            raise HostError(f"Gitea API on GET {path}: {e.reason}") from None
-        except (OSError, ValueError, http.client.HTTPException) as e:
-            raise HostError(f"Gitea API on GET {path}: {e}") from None
-
     @staticmethod
     def field(pull: dict, *keys: str):
-        """pull[k1][k2]…; a missing field is a HostError, not a traceback."""
-        value = pull
-        for key in keys:
-            if not isinstance(value, dict) or key not in value:
-                raise HostError(f"Gitea API answer without {'.'.join(keys)} "
-                                f"for pull request {pull.get('number', '?')}")
-            value = value[key]
-        return value
+        return field(pull, *keys, where=f"Gitea API answer for pull request "
+                                        f"{pull.get('number', '?')}")
 
     def open_pull(self, head: str) -> dict | None:
         page = 1
         while True:
-            pulls = self.api(f"/repos/{self.repo}/pulls?state=open"
-                             f"&limit={self.PAGE}&page={page}")
+            pulls = self.rest.call("GET", f"/repos/{self.repo}/pulls?state=open"
+                                          f"&limit={self.PAGE}&page={page}")
             # Gitea may cap the limit below PAGE, so only an empty page is the end.
             if not isinstance(pulls, list) or not pulls:
                 return None
@@ -236,10 +322,7 @@ class Gitea:
             raise HostError(message(out, f"tea {' '.join(args[:2])} failed"))
 
     def pr(self, worktree: str, base: str, head: str, title: str, body: str) -> tuple[str, str]:
-        try:
-            text = Path(body).read_text(encoding="utf-8")
-        except OSError as e:
-            raise HostError(f"cannot read the body file {body}: {e.strerror or e}") from None
+        text = read_body(body)
         found = self.open_pull(head)
         if found:
             url = self.field(found, "html_url")
@@ -253,52 +336,117 @@ class Gitea:
             raise HostError(f"tea pr create succeeded, but no open pull request for {head}")
         return "created", self.field(found, "html_url")
 
-    def head_sha(self, worktree: str, head: str) -> str:
-        """The commit to poll: <head> in the worktree, i.e. the pushed commit.
-
-        Gitea updates the pull request's head.sha only some time after a push, so a stale
-        head with a final success would read green; so there is no fallback to it.
-        """
-        git = executable("git") or "git"
-        out = run(git, "-C", worktree, "rev-parse", "--verify", "--quiet", f"{head}^{{commit}}")
-        sha = out.stdout.strip()
-        if out.returncode != 0 or not sha:
-            raise HostError(f"{head} is not a branch in {worktree}: cannot tell which commit "
-                            f"to wait for")
-        return sha
-
     def checks(self, worktree: str, head: str, interval: float,
                timeout: float) -> tuple[bool, list[dict]]:
-        deadline = time.monotonic() + timeout
-        sha = self.head_sha(worktree, head)
-        while True:
-            status = self.api(f"/repos/{self.repo}/commits/{sha}/status")
+        sha = head_sha(worktree, head)
+
+        def poll():
+            status = self.rest.call("GET", f"/repos/{self.repo}/commits/{sha}/status")
             if not isinstance(status, dict):
                 raise HostError(f"Gitea API answer for the status of {sha} is not an object")
             entries = status.get("statuses") or []
             # No entry yet means the CI has not reported: keep waiting, never green.
-            if entries and status.get("state") != "pending":
-                return status.get("state") == "success", [
-                    {"name": s.get("context"), "state": s.get("status")} for s in entries]
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise HostError(f"timed out after {timeout:g} s waiting for the checks on {head}")
-            time.sleep(min(interval, remaining))
+            if not entries or status.get("state") == "pending":
+                return None
+            return status.get("state") == "success", [
+                {"name": s.get("context"), "state": s.get("status")} for s in entries]
+
+        return wait_for(poll, head, interval, timeout)
+
+
+# ---------- Bitbucket Server ----------
+
+
+def bitbucket_detail(answer: dict) -> str:
+    return "; ".join(str(e.get("message", "")) for e in answer.get("errors") or []
+                     if isinstance(e, dict))
+
+
+class Bitbucket:
+    name = "bitbucket"
+
+    def __init__(self, profile: dict, path: str) -> None:
+        parts = path.removeprefix("scm/").split("/")
+        if len(parts) != 2 or not all(parts):
+            raise Unsupported(f"{path} is not a Bitbucket <project>/<repo> path")
+        self.project, self.slug = parts
+        self.rest = RestApi("Bitbucket", str(profile.get("url", "")),
+                            f"Bearer {profile.get('token', '')}", bitbucket_detail,
+                            profile.get("ca_bundle") or None)
+        self.pulls = f"/rest/api/1.0/projects/{self.project}/repos/{self.slug}/pull-requests"
+
+    def values(self, path: str, query: str):
+        """Every entry of a paged answer, following nextPageStart until isLastPage."""
+        start = None
+        while True:
+            params = [q for q in (query, f"start={start}" if start is not None else "") if q]
+            page = self.rest.call("GET", path + ("?" + "&".join(params) if params else ""))
+            if not isinstance(page, dict):
+                raise HostError(f"Bitbucket API answer on GET {path} is not an object")
+            yield from page.get("values") or []
+            if page.get("isLastPage", True) or page.get("nextPageStart") is None:
+                return
+            start = page["nextPageStart"]
+
+    def ref(self, branch: str) -> dict:
+        return {"id": f"refs/heads/{branch}",
+                "repository": {"slug": self.slug, "project": {"key": self.project}}}
+
+    @staticmethod
+    def url(pull) -> str:
+        ident = pull.get("id", "?") if isinstance(pull, dict) else "?"
+        return field(pull, "links", "self", 0, "href",
+                     where=f"Bitbucket API answer for pull request {ident}")
+
+    def pr(self, worktree: str, base: str, head: str, title: str, body: str) -> tuple[str, str]:
+        text = read_body(body)
+        ref = f"refs/heads/{head}"
+        found = next((p for p in self.values(
+            self.pulls, f"state=OPEN&direction=OUTGOING&at={quote(ref, safe='/')}")
+            if isinstance(p, dict) and (p.get("fromRef") or {}).get("id") == ref), None)
+        if found:
+            where = f"Bitbucket API answer for pull request {found.get('id', '?')}"
+            ident = field(found, "id", where=where)
+            updated = self.rest.call("PUT", f"{self.pulls}/{ident}", {
+                "version": field(found, "version", where=where),
+                "title": title, "description": text})
+            return "updated", self.url(updated)
+        created = self.rest.call("POST", self.pulls, {
+            "title": title, "description": text,
+            "fromRef": self.ref(head), "toRef": self.ref(base)})
+        return "created", self.url(created)
+
+    def checks(self, worktree: str, head: str, interval: float,
+               timeout: float) -> tuple[bool, list[dict]]:
+        sha = head_sha(worktree, head)
+
+        def poll():
+            entries = [s for s in self.values(f"/rest/build-status/1.0/commits/{sha}", "")
+                       if isinstance(s, dict)]
+            # No status yet means Jenkins has not reported: keep waiting, never green.
+            if not entries or any(s.get("state") == "INPROGRESS" for s in entries):
+                return None
+            return all(s.get("state") == "SUCCESSFUL" for s in entries), [
+                {"name": s.get("name") or s.get("key"), "state": s.get("state")}
+                for s in entries]
+
+        return wait_for(poll, head, interval, timeout)
 
 
 # ---------- backend choice ----------
 
 
-def bitbucket_served(host: str) -> bool:
+def bitbucket_profile(host: str) -> dict | None:
+    """The first profile in ~/.bitbucket/profiles.json whose url has hostname `host`."""
     file = Path.home() / ".bitbucket" / "profiles.json"
     if not file.is_file():
-        return False
+        return None
     try:
         profiles = json.loads(file.read_text(encoding="utf-8")).get("profiles", {})
+        return next((p for p in profiles.values()
+                     if isinstance(p, dict) and hostname(p.get("url", "")) == host), None)
     except (OSError, ValueError, AttributeError):
-        return False
-    return any(isinstance(p, dict) and hostname(p.get("url", "")) == host
-               for p in profiles.values())
+        return None
 
 
 def tea_config() -> Path:
@@ -333,8 +481,9 @@ def choose(host: str | None, path: str) -> Backend:
         if not gh:
             raise Unsupported(f"no gh on PATH for the local remote {path}")
         return GitHub(gh, served=False)
-    if bitbucket_served(host):
-        raise HostError(f"the Bitbucket backend is not implemented yet ({host})")
+    profile = bitbucket_profile(host)
+    if profile:
+        return Bitbucket(profile, path)
     login = tea_login(host)
     if login:
         tea = executable("tea")
