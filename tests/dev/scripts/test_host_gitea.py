@@ -7,11 +7,10 @@ login token is `secret-t` and must never reach stdout or stderr.
 from __future__ import annotations
 
 import json
-import subprocess
 
 import pytest
 
-from host_fakes import FakeGitea, env, fake_bin, log, repo, run, write_tea, write_tea_config
+from host_fakes import FakeGitea, commit_on_feat, env, fake_bin, log, repo, run, write_tea, write_tea_config
 
 TOKEN = "secret-t"
 SHA = "abc123"
@@ -48,15 +47,6 @@ def pr_run(tmp_path, work, e):
 
 def checks_run(work, e, *extra):
     return run("checks", work, "--head", "feat", "--interval", "0", *extra, env=e)
-
-
-def commit_on_feat(work) -> str:
-    """A real commit on branch `feat` in the worktree; return its sha."""
-    git = ["git", "-C", str(work), "-c", "user.name=t", "-c", "user.email=t@example.com"]
-    subprocess.run([*git, "checkout", "-q", "-b", "feat"], check=True, capture_output=True)
-    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "c"], check=True, capture_output=True)
-    out = subprocess.run([*git, "rev-parse", "feat"], check=True, capture_output=True, text=True)
-    return out.stdout.strip()
 
 
 def test_gitea_pr_creates(tmp_path, api):

@@ -226,3 +226,111 @@ class FakeGitea:
     def stop(self) -> None:
         self.server.shutdown()
         self.server.server_close()
+
+
+def commit_on_feat(work) -> str:
+    """A real commit on branch `feat` in the worktree; return its sha."""
+    git = ["git", "-C", str(work), "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    subprocess.run([*git, "checkout", "-q", "-b", "feat"], check=True, capture_output=True)
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "c"], check=True, capture_output=True)
+    out = subprocess.run([*git, "rev-parse", "feat"], check=True, capture_output=True, text=True)
+    return out.stdout.strip()
+
+
+# ---------- Bitbucket Server: profile and fake REST API ----------
+
+def write_bitbucket_profile(tmp_path: Path, port: int, token: str = "secret-b",
+                            ca_bundle: str | None = None) -> None:
+    """~/.bitbucket/profiles.json with the profile `work` for 127.0.0.1."""
+    cfg = tmp_path / ".bitbucket" / "profiles.json"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    profile = {"url": f"http://127.0.0.1:{port}", "token": token}
+    if ca_bundle:
+        profile["ca_bundle"] = ca_bundle
+    cfg.write_text(json.dumps({"profiles": {"work": profile}}), encoding="utf-8")
+
+
+class FakeBitbucket:
+    """A Bitbucket Server REST API on 127.0.0.1, scripted and recording.
+
+    pr_pages: the answers of the pull-request lookup, one `values` list per page; page i
+    is served for `start=<10*i>` and says isLastPage false until the final one.
+    created: the answer to a POST of a pull request; updated: the answer to a PUT.
+    statuses: the `values` lists of the build-status endpoint in order, the last one repeats.
+    stale_sha: a commit whose build-status endpoint always answers a final SUCCESSFUL.
+    errors: {path fragment: (http code, json body)} answered instead of the script.
+    requests: one dict per request: method, path, headers, body (parsed JSON or None).
+    """
+
+    def __init__(self) -> None:
+        self.pr_pages: list = [[]]
+        self.created: dict = {}
+        self.updated: dict = {}
+        self.statuses: list = []
+        self.stale_sha: str | None = None
+        self.errors: dict = {}
+        self.requests: list = []
+        fake = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *a):  # keep pytest output quiet
+                pass
+
+            def handle_any(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                fake.requests.append({"method": self.command, "path": self.path,
+                                      "headers": dict(self.headers),
+                                      "body": json.loads(raw) if raw else None})
+                code, payload = fake.answer(self.command, self.path)
+                data = json.dumps(payload).encode("utf-8")
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            do_GET = do_POST = do_PUT = handle_any
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.port = self.server.server_address[1]
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+
+    def answer(self, method: str, path: str):
+        for fragment, (code, body) in self.errors.items():
+            if fragment in path:
+                return code, body
+        bare = path.split("?")[0]
+        if "/build-status/1.0/commits/" in bare:
+            if self.stale_sha and bare.endswith(f"/commits/{self.stale_sha}"):
+                return 200, {"values": [{"state": "SUCCESSFUL", "name": "ci/old"}],
+                             "isLastPage": True}
+            n = len([r for r in self.status_requests()
+                     if not (self.stale_sha and r["path"].split("?")[0].endswith(self.stale_sha))]) - 1
+            return 200, {"values": self.statuses[min(n, len(self.statuses) - 1)],
+                         "isLastPage": True}
+        if bare.endswith("/pull-requests") and method == "GET":
+            m = re.search(r"[?&]start=(\d+)", path)
+            page = int(m.group(1)) // 10 if m else 0
+            last = page >= len(self.pr_pages) - 1
+            values = self.pr_pages[page] if page < len(self.pr_pages) else []
+            answer = {"values": values, "isLastPage": last}
+            if not last:
+                answer["nextPageStart"] = (page + 1) * 10
+            return 200, answer
+        if bare.endswith("/pull-requests") and method == "POST":
+            return 201, self.created
+        if "/pull-requests/" in bare and method == "PUT":
+            return 200, self.updated
+        return 404, {"errors": [{"message": "not found"}]}
+
+    def status_requests(self) -> list:
+        return [r for r in self.requests if "/build-status/1.0/commits/" in r["path"]]
+
+    def start(self) -> "FakeBitbucket":
+        self.thread.start()
+        return self
+
+    def stop(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
