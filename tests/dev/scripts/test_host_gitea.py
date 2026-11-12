@@ -88,7 +88,6 @@ def test_gitea_api_sends_token(tmp_path, api):
 
 
 def test_gitea_checks_waits_until_final(tmp_path, api):
-    api.pulls = [pull(7)]
     api.statuses = [
         {"state": "pending", "statuses": []},
         {"state": "pending", "statuses": [{"context": "ci/build", "status": "pending"}]},
@@ -112,7 +111,7 @@ def test_gitea_checks_red(tmp_path, api):
         {"context": "ci/build", "status": "success"},
         {"context": "ci/test", "status": "failure"}]}]
     work, e = setup(tmp_path, api)
-    local = commit_on_feat(work)
+    commit_on_feat(work)
     r = checks_run(work, e)
     assert r.returncode == 1, r.stderr
     out = json.loads(r.stdout)
@@ -121,7 +120,6 @@ def test_gitea_checks_red(tmp_path, api):
 
 
 def test_gitea_checks_timeout(tmp_path, api):
-    api.pulls = [pull(7)]
     api.statuses = [{"state": "pending", "statuses": []}]
     work, e = setup(tmp_path, api)
     local = commit_on_feat(work)
@@ -153,10 +151,9 @@ def test_gitea_http_error_is_exit_3_without_token(tmp_path, api):
 
 
 def test_gitea_status_http_error_is_exit_3(tmp_path, api):
-    api.pulls = [pull(7)]
     api.errors = {"/status": (404, {"message": "no such commit"})}
     work, e = setup(tmp_path, api)
-    local = commit_on_feat(work)
+    commit_on_feat(work)
     r = checks_run(work, e)
     assert r.returncode == 3
     assert "404" in r.stderr and "no such commit" in r.stderr
@@ -168,7 +165,6 @@ def test_gitea_checks_polls_the_pushed_commit(tmp_path, api):
     work, e = setup(tmp_path, api)
     local = commit_on_feat(work)
     assert local != SHA
-    api.pulls = [pull(7)]  # head.sha is the stale SHA
     api.stale_sha = SHA
     api.statuses = [
         {"state": "pending", "statuses": []},
@@ -203,7 +199,6 @@ def test_gitea_pr_finds_open_pr_on_second_page(tmp_path, api):
 
 
 def test_gitea_checks_success_with_empty_statuses_keeps_waiting(tmp_path, api):
-    api.pulls = [pull(7)]
     api.statuses = [
         {"state": "success", "statuses": []},
         {"state": "success", "statuses": [{"context": "ci/build", "status": "success"}]},
@@ -240,7 +235,6 @@ def test_gitea_missing_field_is_exit_3(tmp_path, api):
 
 
 def test_gitea_checks_without_local_branch_is_exit_3(tmp_path, api):
-    api.pulls = [pull(7)]
     api.statuses = [{"state": "success", "statuses": [{"context": "ci/build", "status": "success"}]}]
     work, e = setup(tmp_path, api)  # no commit, no branch `feat`
     r = checks_run(work, e)
@@ -249,3 +243,17 @@ def test_gitea_checks_without_local_branch_is_exit_3(tmp_path, api):
     assert "Traceback" not in r.stderr
     assert not api.status_requests()
     assert TOKEN not in r.stdout + r.stderr
+
+
+def test_gitea_relative_body_file(tmp_path, api):
+    api.pulls = []
+    api.pulls_after = [pull(5, url="http://127.0.0.1/o/r/pulls/5")]
+    work, e = setup(tmp_path, api)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "body.md").write_text("the relative body", encoding="utf-8")
+    r = run("pr", work, "--base", "develop", "--head", "feat", "--title", "T",
+            "--body-file", "body.md", env=e, cwd=elsewhere)
+    assert r.returncode == 0, r.stderr
+    create = [c for c in log(tmp_path) if c[:2] == ["pr", "create"]][0]
+    assert create[create.index("--description") + 1] == "the relative body"

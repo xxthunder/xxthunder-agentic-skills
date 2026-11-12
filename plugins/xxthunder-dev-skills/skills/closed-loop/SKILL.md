@@ -1,7 +1,7 @@
 ---
 name: closed-loop
 description: "Drive one backlog item through the closed loop — from the board to a pull request whose body is the evidence package, ended on the target repository's gate, never on a reviewer's approval. Use on 'put ABC-012 in the loop', 'start the loop for ABC-012', 'continue the loop for ABC-012'; German 'nimm ABC-012 in die Loop', 'bring ABC-012 in den Loop', 'starte die Loop für ABC-012', 'mach weiter mit der Loop für ABC-012'; and, for the item in focus, 'Make it so!', 'Engage!', 'Start the loop!', 'Energie!', 'Starte die Loop!'. Works from any repository: the item is found in the current backlog or the board's registry. Not for repeating a prompt on an interval."
-allowed-tools: Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/loop.py *), Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/store *)
+allowed-tools: Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/loop.py *), Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py *), Bash(uv run ${CLAUDE_PLUGIN_ROOT}/scripts/host.py *), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/store *)
 ---
 
 <!-- Source: https://github.com/xxthunder/xxthunder-agentic-skills/tree/develop/plugins/xxthunder-dev-skills/skills/closed-loop -->
@@ -25,10 +25,11 @@ Every mechanical step is a script call. The scripts:
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/store" <resolve|contract> ...
 uv run "${CLAUDE_PLUGIN_ROOT}/scripts/loop.py" <checkout|row|first|state|guard|commit-impl|fixup|fold> ...
+uv run "${CLAUDE_PLUGIN_ROOT}/scripts/host.py" <pr|checks> ...
 ```
 
-Below, `store` and `loop.py` stand for these two calls. `loop.py --help` describes each
-subcommand's arguments and output.
+Below, `store`, `loop.py` and `host.py` stand for these three calls. `loop.py --help` and
+`host.py --help` describe each subcommand's arguments and output.
 A non-zero exit you do not expect ends the step: show the message and stop.
 
 ## What starts what
@@ -188,17 +189,23 @@ A concern about the gate itself goes into the package under *Open*; it is not a 
 **CI as the gate**, where the contract says the CI is the gate: push the branch **unfolded**
 (`git push -u origin <branch>`) — a fold now would rewrite the commits the `tests_*` ranges
 name, and every later guard would check ranges that no longer exist. Open the pull request
-with `gh pr create` and an interim body, record `loop.py state <worktree> pr=<url>`, and
-wait with `gh pr checks <number> --watch`. A red check is a red gate (same rounds; push
-each fix unfolded). All green → fold ([Package](#package) step 1), push with
-`--force-with-lease`, and wait for the checks once more: the fold leaves the tree identical,
+with `host.py pr` as in [Package](#package) step 4, with an interim body, and record
+`loop.py state <worktree> pr=<url>` with the `url` of its JSON. Wait with
+`host.py checks <worktree> --head <branch>`: exit 0 is green, exit 1 is a red check and so
+a red gate (same rounds; push each fix unfolded, then wait again). All green → fold
+([Package](#package) step 1), push with `--force-with-lease`, and wait once more with
+`host.py checks <worktree> --head <branch>`: the fold leaves the tree identical,
 but it re-runs the CI, and the loop ends only on that run's green. A red check on that run
 is the [stop](#stops) *red CI after the fold* — no fix round: the tree is the one that was
 green, so the cause lies in the CI, and the ranges and fixup targets no longer exist.
 
-**GitHub only, for now.** Pull requests and their checks go through `gh`. Whether it serves
-the remote is `gh`'s answer, not the remote URL's: a non-zero exit of `gh pr create` or
-`gh pr checks` is the [stop](#stops) *unsupported remote*, with `gh`'s message.
+**The host.** Open pull requests and read checks through `host.py` only — never with a
+host's own CLI. The script picks the backend by the login that serves the remote. Its exit
+code decides:
+- exit 2 → the [stop](#stops) *unsupported remote*; its stderr message names the remote
+  and what is missing;
+- exit 3 → the host call failed or timed out: an unexpected non-zero exit — show the
+  message and stop.
 
 ## Package
 
@@ -222,10 +229,11 @@ the remote is `gh`'s answer, not the remote URL's: a non-zero exit of `gh pr cre
      on the author's behalf, and the gate's fix rounds.
    - *Measurements*: eval runs and costs where this run measured them; else leave the
      section out.
-4. Open it: `gh pr create --base <default branch> --head <branch> --title "<ID>: <title>" --body-file <file>`
-   — or, when the state already holds a `pr` (CI as the gate),
-   `gh pr edit <number> --body-file <file>`.
-5. `loop.py state <worktree> step=done pr=<url>`, and notify with the link.
+4. Open it: `host.py pr <worktree> --base <default branch> --head <branch> --title "<ID>: <title>" --body-file <file>`
+   — one call, also when the state already holds a `pr` (CI as the gate): the script
+   updates the open pull request itself. Exit 2 or 3 → as in [Gate](#gate), *The host*.
+5. `loop.py state <worktree> step=done pr=<url>` with the `url` of its JSON, and notify
+   with the link.
 
 The loop ends here. The author merges, ticks the acceptance criteria and closes the item.
 
@@ -239,7 +247,7 @@ else the loop carries on through, and what worries you goes under *Open* in the 
 | red gate | the gate still red after two fix rounds |
 | dispute | still open after two exchanges, or an acceptance criterion found wrong |
 | scope | a plan or build question the item does not settle |
-| unsupported remote | `gh` cannot open the pull request or read its checks |
+| unsupported remote | `host.py` exits 2: no backend serves the remote — its message says what is missing |
 | hook refuses fold commits | a commit hook of the repository rejects the `amend!`/`fixup!` subjects the loop folds by |
 | fold failed | `loop.py fold` exits 1 |
 | red CI after the fold | a check red on the folded branch whose unfolded tree was green — the notification names the red checks, says the tree is unchanged since the green run, and asks the author to re-run or fix the CI |
@@ -250,7 +258,8 @@ At a stop:
 2. Notify: name the decision. Use the harness's push-notification tool where there is one;
    otherwise the answer is the notification.
 3. End the turn with the decision as one question — the gate's output tail, the dispute's
-   text and the test it is about, or the open question. Make no commit, push or pull request
+   text and the test it is about, `host.py`'s message that names the remote and what is
+   missing, or the open question. Make no commit, push or pull request
    while it waits.
 
 Milestones get a notification too: plan written, gate green or red, pull request opened.

@@ -18,7 +18,10 @@ Subcommands (output is JSON on stdout, errors go to stderr):
       {"backend", "state": "green"|"red", "checks": [{"name", "state"}]}.
       GitHub: `gh pr checks --watch` waits; exit 0 is green, exit 1 with its check table
       is red, any other failure of gh is exit 3 (exit 2 on a remote without a host);
-      checks is [].
+      checks is []. gh reads the pull request's current head, so right after a push it
+      may report the previous commit's result, or "no checks reported" (exit 3), as
+      before XAS-087; --interval and --timeout do not apply to it. A follow-up item
+      makes GitHub wait for the pushed commit.
 
 The remote is the raw `remote.origin.url` of <worktree>. The backend is the first that
 serves its host, in this order:
@@ -28,11 +31,15 @@ serves its host, in this order:
   3. GitHub: `gh auth token --hostname <host>` succeeds. A remote without a host (a local
      path or file:// URL) always goes to GitHub.
 
+<body-file> is resolved against the current directory before any backend reads it.
+
 Exit codes (both subcommands):
   0  done / checks green
   1  checks red
-  2  unsupported remote: "unsupported remote <url>: <what is missing>"
-  3  the host call failed or the checks timed out: the CLI's or API's message
+  2  unsupported remote: "unsupported remote <url>: <what is missing>", the URL without
+     any user:password@
+  3  the host call failed or the checks timed out: the CLI's or API's message; also a
+     usage error (a missing or unknown argument)
 
 Gitea: `tea pr create` / `tea pr edit` (with --login and --repo) open or update the pull
 request; the REST API (<login url>/api/v1, the login's token) finds the open one by its
@@ -53,7 +60,7 @@ worktree is exit 3. It waits until there is at least one status and none is INPR
 green only when all are SUCCESSFUL. Each check is {"name": name or key, "state": the raw
 state}.
 
-A token is never printed, also not in an error message. Stdlib plus PyYAML; no shell, so
+A token is never printed, also not in an error message, nor a credential in the remote URL. Stdlib plus PyYAML; no shell, so
 it runs on Windows.
 """
 from __future__ import annotations
@@ -498,6 +505,25 @@ def choose(host: str | None, path: str) -> Backend:
 # ---------- CLI ----------
 
 
+def redact(text: str, url: str | None) -> str:
+    """`text` with the user:password@ of `url` removed wherever it appears."""
+    if not url or "://" not in url:
+        return text
+    parsed = urlparse(url)
+    if "@" not in parsed.netloc:
+        return text
+    userinfo = parsed.netloc.rsplit("@", 1)[0] + "@"
+    return text.replace(userinfo, "")
+
+
+class Parser(argparse.ArgumentParser):
+    """A usage error exits 3: exit 2 means an unsupported remote to the caller."""
+
+    def error(self, message: str):
+        self.print_usage(sys.stderr)
+        self.exit(3, f"{self.prog}: error: {message}\n")
+
+
 def remote_url(worktree: str) -> str:
     git = executable("git") or "git"
     out = run(git, "-C", worktree, "config", "--get", "remote.origin.url")
@@ -521,8 +547,8 @@ def cmd_checks(args: argparse.Namespace, backend: Backend) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Pull requests and CI checks on the repository's host.")
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    parser = Parser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="cmd", required=True, parser_class=Parser)
 
     p = sub.add_parser("pr", help="open or update the pull request for a branch")
     p.add_argument("worktree")
@@ -540,16 +566,19 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_checks)
 
     args = parser.parse_args(argv)
+    if getattr(args, "body_file", None):
+        # gh runs in the worktree, so a relative path must not depend on its cwd.
+        args.body_file = str(Path(args.body_file).resolve())
     url = None
     try:
         url = remote_url(args.worktree)
         backend = choose(*split_remote(url))
         return args.func(args, backend)
     except Unsupported as e:
-        print(f"unsupported remote {url or args.worktree}: {e}", file=sys.stderr)
+        print(redact(f"unsupported remote {url or args.worktree}: {e}", url), file=sys.stderr)
         return 2
     except HostError as e:
-        print(str(e), file=sys.stderr)
+        print(redact(str(e), url), file=sys.stderr)
         return 3
 
 

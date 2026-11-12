@@ -47,6 +47,10 @@ if key == "auth token":
 if key == "pr list":
     print(cfg.get("pr_list", ""))
     sys.exit(0)
+if key in ("pr create", "pr edit") and "--body-file" in args:
+    # record the content gh would read, so a test can assert on it
+    body_text = Path(args[args.index("--body-file") + 1]).read_text(encoding="utf-8")
+    Path(os.environ["FAKE_LOG"] + ".body").write_text(body_text, encoding="utf-8")
 if key == "pr create":
     print(cfg.get("create_url", ""))
     sys.exit(0)
@@ -94,10 +98,10 @@ def env(tmp_path: Path, bin_dir: Path) -> dict:
     return e
 
 
-def run(*args, env: dict) -> subprocess.CompletedProcess:
+def run(*args, env: dict, cwd=None) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, str(HOST), *map(str, args)],
-        capture_output=True, text=True, env=env,
+        capture_output=True, text=True, env=env, cwd=cwd,
     )
 
 

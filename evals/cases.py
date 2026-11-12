@@ -597,6 +597,25 @@ def setup_loop_dispute(demo: Path) -> None:
     loop_state(demo, "item=DEMO-007", "step=dispute", "task=1.b", "exchanges=2", f"dispute={LOOP_DISPUTE}")
 
 
+def setup_loop_unsupported_remote(demo: Path) -> None:
+    """`setup_loop_at_gate`, but the raw remote URL names a host no login serves; pushes still reach the bare repo."""
+    setup_loop_at_gate(demo, 0)
+    bare = subprocess.run(["git", "-C", str(demo), "config", "--get", "remote.origin.url"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    url = "https://forge.example.com/demo/demo.git"
+    subprocess.run(["git", "-C", str(demo), "config", f"url.{bare}.insteadOf", url], check=True)
+    subprocess.run(["git", "-C", str(demo), "remote", "set-url", "origin", url], check=True)
+
+
+def check_loop_unsupported_remote(s: State) -> list[str]:
+    return (expect(not pr_calls(s), f"a pull request was opened: {pr_calls(s)}")
+            + expect(not pr_calls(s, "edit"), f"a pull request was edited: {pr_calls(s, 'edit')}")
+            + asks(s)
+            + expect(re.search(r"unsupported|nicht unterstützt", s.output, re.I) is not None,
+                     "the answer does not name the stop (unsupported remote)")
+            + expect("forge.example.com" in s.output, "the answer does not name the host forge.example.com"))
+
+
 QA_OFFER_RE = re.compile(r"Q ?& ?A|\bplan\b|Rückfrage|Runde", re.I)
 PACKAGE_SECTIONS = ("Item", "What changes", "Gate", "Review", "Your steps", "Open")
 
@@ -960,6 +979,8 @@ CASES = [
          closed_loop=True, setup=lambda demo: setup_loop_at_gate(demo, 1)),
     Case("loop-green-gate", "closed-loop", "continue the loop for DEMO-007", check_loop_green_gate,
          closed_loop=True, setup=lambda demo: setup_loop_at_gate(demo, 0)),
+    Case("loop-unsupported-remote", "closed-loop", "continue the loop for DEMO-007", check_loop_unsupported_remote,
+         closed_loop=True, setup=setup_loop_unsupported_remote),
     Case("loop-open-dispute", "closed-loop", "continue the loop for DEMO-007", check_loop_open_dispute,
          closed_loop=True, setup=setup_loop_dispute),
     Case("loop-unknown-id", "closed-loop", "put FOO-001 in the loop", check_loop_unknown_id, closed_loop=True),

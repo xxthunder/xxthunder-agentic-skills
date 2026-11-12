@@ -278,3 +278,16 @@ def test_bitbucket_remote_path_not_project_repo_is_unsupported(tmp_path, api):
     assert r.returncode == 2, r.stderr
     assert r.stderr.startswith("unsupported remote")
     assert api.requests == []
+
+
+def test_bitbucket_relative_body_file(tmp_path, api):
+    api.created = pull(11)
+    work, e = setup(tmp_path, api)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "body.md").write_text("the relative body", encoding="utf-8")
+    r = run("pr", work, "--base", "develop", "--head", "feat", "--title", "T",
+            "--body-file", "body.md", env=e, cwd=elsewhere)
+    assert r.returncode == 0, r.stderr
+    post = calls(api, "POST")[0]
+    assert post["body"]["description"] == "the relative body"

@@ -94,6 +94,7 @@ flowchart TB
         backlog --> boardpy
         record --> adrpy["scripts/adr.py"]
         loop["closed-loop"] --> loopy["scripts/loop.py"]
+        loop --> hostpy["scripts/host.py"]
         loop --> storesh
         loop --> backpy
         loop -.superpowers: writing-plans, SDD.-> sdd["superpowers"]
@@ -109,7 +110,8 @@ flowchart TB
 **`xxthunder-dev-skills`** — ten skills, all markdown, plus three pieces of
 executable code: a `SessionStart` hook under `hooks/` (`hooks.json`, an
 extensionless `session-start`, and a polyglot `run-hook.cmd` that locates a
-bash on Windows), and five plugin-level scripts under `scripts/`.
+bash on Windows), and six plugin-level scripts under `scripts/`: `adr.py`,
+`backlog.py`, `board.py`, `host.py`, `loop.py` and `store`.
 
 `scripts/` is the plugin's place for executable helpers **shared by more than
 one skill**; a helper used by a single skill stays in that skill's own
@@ -134,7 +136,7 @@ tree. `board.py`, a PEP 723 script like it, makes every change to the board
 owns the board's format: columns, card, escaping, links (ADR-0017). It reads
 an item's title fresh through `backlog.py`'s parser, gives no card to an epic
 or the standing refinement item, and says `changed:` or `unchanged:`, so the
-skill commits only a real change. `loop.py` is one of the two
+skill commits only a real change. `loop.py` is one of the three
 scripts here that a single skill calls: `closed-loop` runs it, and the eval
 harness runs it too, to seed a loop's state for its cases. It reads rows of
 the registry's tables, turns a remote into its org and repo, finds the first
@@ -142,7 +144,7 @@ file a contract names, keeps the loop's state in the worktree's git directory,
 guards that the implementer left the tester's files alone, and commits and
 folds the loop's commits with git's autosquash, the repository's hooks
 included (ADR-0016). `adr.py`, a PEP 723 script with `tomlkit` as its one
-dependency, is the other: `design-record` runs `adr.py migrate` where a root
+dependency, is another: `design-record` runs `adr.py migrate` where a root
 `ubproject.toml` switches sphinx-needs on. It turns every ADR header written in
 the template into a `decision` need, keeping the bold-field lines below it,
 declares the need type and the `constrains` link type in `ubproject.toml`
@@ -151,7 +153,11 @@ when one ADR or declaration does not fit, when the repository's
 `id_regex`, or sphinx-needs' default where it sets none, rejects the ADR IDs,
 or when `needs.types` is missing; it never writes either. Every run also
 rewrites a need's `:status:` where it differs from the Status line, reporting
-`updated:` (XAS-044b, ADR-0018). Mechanics
+`updated:` (XAS-044b, ADR-0018). `host.py`, a PEP 723 script with PyYAML as
+its one dependency, is the third: `closed-loop` opens or updates its pull
+request and waits for its checks through it. It stays one script with a
+backend per host — GitHub, Gitea, Bitbucket Server — so a further host is a
+backend, not a skill change (XAS-087). Mechanics
 with a right answer live in the scripts and
 are tested; judgment — running a store's tests for a learning, drafting from
 its template, finding the right place for a log line, wording an item — stays
@@ -185,10 +191,10 @@ The board and the logbook know nothing of each other.
 scripts run via `uv run`: `naps2-scan` (3 scripts), `simplex-merge` (1),
 `split-batch` (4). This is the bulk of the repository's executable code, but no
 longer all of it: the `SessionStart` hook and `scripts/store` above are shell,
-`scripts/backlog.py`, `scripts/board.py`, `scripts/loop.py` and
-`scripts/adr.py` are Python, and `tests/` is split `tests/paperless/` for the
-helper scripts, `tests/dev/` for the hook, the store resolver, the backlog,
-board, loop and ADR scripts, and the backlog and ADR-log invariants.
+`scripts/backlog.py`, `scripts/board.py`, `scripts/loop.py`,
+`scripts/host.py` and `scripts/adr.py` are Python, and `tests/` is split
+`tests/paperless/` for the helper scripts, `tests/dev/` for the hook, the
+store resolver, the backlog, board, loop, host and ADR scripts, and the backlog and ADR-log invariants.
 
 ## Key flows
 
