@@ -11,7 +11,6 @@
 ### Open
 - [XAS-089 — The implementer commits its own change of a unit with commit-impl](xas-089.md)
 - [XAS-088 — XAS-044b's deferred review findings](xas-088.md)
-- [XAS-087 — The closed loop talks to its host through one script, with backends for GitHub, Gitea and Bitbucket Server](xas-087.md)
 - [XAS-085 — design-record's mechanical ADR steps run through a script](xas-085.md)
 - [XAS-084 — A backlog has no standing refinement item: a refinement commit names the item it refines](xas-084.md)
 - [XAS-083 — The closed loop spends its token budget on reviews, not on rebuilt context](xas-083.md)
@@ -59,6 +58,7 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
+- [XAS-087 — The closed loop talks to its host through one script, with backends for GitHub, Gitea and Bitbucket Server](xas-087.md)
 - [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
 - [XAS-044a — ADR: requirements become a binding design artifact where sphinx-needs is in use](xas-044a.md)
 - [XAS-044 — Requirements as a binding design artifact where sphinx-needs is in use](xas-044.md)
