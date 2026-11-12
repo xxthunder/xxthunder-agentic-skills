@@ -34,18 +34,30 @@ Exit codes (both subcommands):
   2  unsupported remote: "unsupported remote <url>: <what is missing>"
   3  the host call failed or the checks timed out: the CLI's or API's message
 
+Gitea: `tea pr create` / `tea pr edit` (with --login and --repo) open or update the pull
+request; the REST API (<login url>/api/v1, the login's token) finds the open one by its
+head branch; `checks` polls the combined commit status of <head> as the worktree has it
+(the pushed commit), never the pull request's head.sha, which Gitea updates late; <head>
+not a branch in the worktree is exit 3. The tea flags follow tea's documentation; this
+repository's tests run a fake tea, not a real one. `checks` waits until the status has at
+least one entry and is no longer pending; green only on success.
+
 A token is never printed, also not in an error message. Stdlib plus PyYAML; no shell, so
 it runs on Windows.
 """
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlparse
@@ -162,6 +174,118 @@ class GitHub:
         raise self.error(message(out, f"gh pr checks failed with exit {out.returncode}"))
 
 
+# ---------- Gitea ----------
+
+
+class Gitea:
+    name = "gitea"
+    PAGE = 50
+
+    def __init__(self, tea: str, login: dict, path: str) -> None:
+        self.tea = tea
+        self.login = str(login.get("name", ""))
+        self.token = str(login.get("token", ""))
+        self.api_base = str(login.get("url", "")).rstrip("/") + "/api/v1"
+        self.repo = path
+        self.where = ("--login", self.login, "--repo", self.repo)
+
+    def api(self, path: str):
+        request = urllib.request.Request(self.api_base + path, headers={
+            "Authorization": f"token {self.token}", "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            try:
+                detail = json.loads(e.read().decode("utf-8")).get("message", "")
+            except (OSError, ValueError, AttributeError):
+                detail = ""
+            raise HostError(f"Gitea API {e.code} on GET {path}: {detail or e.reason}") from None
+        except urllib.error.URLError as e:
+            raise HostError(f"Gitea API on GET {path}: {e.reason}") from None
+        except (OSError, ValueError, http.client.HTTPException) as e:
+            raise HostError(f"Gitea API on GET {path}: {e}") from None
+
+    @staticmethod
+    def field(pull: dict, *keys: str):
+        """pull[k1][k2]…; a missing field is a HostError, not a traceback."""
+        value = pull
+        for key in keys:
+            if not isinstance(value, dict) or key not in value:
+                raise HostError(f"Gitea API answer without {'.'.join(keys)} "
+                                f"for pull request {pull.get('number', '?')}")
+            value = value[key]
+        return value
+
+    def open_pull(self, head: str) -> dict | None:
+        page = 1
+        while True:
+            pulls = self.api(f"/repos/{self.repo}/pulls?state=open"
+                             f"&limit={self.PAGE}&page={page}")
+            # Gitea may cap the limit below PAGE, so only an empty page is the end.
+            if not isinstance(pulls, list) or not pulls:
+                return None
+            for pull in pulls:
+                if isinstance(pull, dict) and (pull.get("head") or {}).get("ref") == head:
+                    return pull
+            page += 1
+
+    def call(self, worktree: str, *args: str) -> None:
+        out = run(self.tea, *args, cwd=worktree)
+        if out.returncode != 0:
+            raise HostError(message(out, f"tea {' '.join(args[:2])} failed"))
+
+    def pr(self, worktree: str, base: str, head: str, title: str, body: str) -> tuple[str, str]:
+        try:
+            text = Path(body).read_text(encoding="utf-8")
+        except OSError as e:
+            raise HostError(f"cannot read the body file {body}: {e.strerror or e}") from None
+        found = self.open_pull(head)
+        if found:
+            url = self.field(found, "html_url")
+            self.call(worktree, "pr", "edit", str(self.field(found, "number")), *self.where,
+                      "--title", title, "--description", text)
+            return "updated", url
+        self.call(worktree, "pr", "create", *self.where, "--base", base, "--head", head,
+                  "--title", title, "--description", text)
+        found = self.open_pull(head)
+        if not found:
+            raise HostError(f"tea pr create succeeded, but no open pull request for {head}")
+        return "created", self.field(found, "html_url")
+
+    def head_sha(self, worktree: str, head: str) -> str:
+        """The commit to poll: <head> in the worktree, i.e. the pushed commit.
+
+        Gitea updates the pull request's head.sha only some time after a push, so a stale
+        head with a final success would read green; so there is no fallback to it.
+        """
+        git = executable("git") or "git"
+        out = run(git, "-C", worktree, "rev-parse", "--verify", "--quiet", f"{head}^{{commit}}")
+        sha = out.stdout.strip()
+        if out.returncode != 0 or not sha:
+            raise HostError(f"{head} is not a branch in {worktree}: cannot tell which commit "
+                            f"to wait for")
+        return sha
+
+    def checks(self, worktree: str, head: str, interval: float,
+               timeout: float) -> tuple[bool, list[dict]]:
+        deadline = time.monotonic() + timeout
+        sha = self.head_sha(worktree, head)
+        while True:
+            status = self.api(f"/repos/{self.repo}/commits/{sha}/status")
+            if not isinstance(status, dict):
+                raise HostError(f"Gitea API answer for the status of {sha} is not an object")
+            entries = status.get("statuses") or []
+            # No entry yet means the CI has not reported: keep waiting, never green.
+            if entries and status.get("state") != "pending":
+                return status.get("state") == "success", [
+                    {"name": s.get("context"), "state": s.get("status")} for s in entries]
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise HostError(f"timed out after {timeout:g} s waiting for the checks on {head}")
+            time.sleep(min(interval, remaining))
+
+
 # ---------- backend choice ----------
 
 
@@ -183,16 +307,17 @@ def tea_config() -> Path:
     return base / "tea" / "config.yml"
 
 
-def tea_served(host: str) -> bool:
+def tea_login(host: str) -> dict | None:
+    """The first login in tea's config whose url has hostname `host`."""
     file = tea_config()
     if not file.is_file():
-        return False
+        return None
     try:
         logins = (yaml.safe_load(file.read_text(encoding="utf-8")) or {}).get("logins") or []
     except (OSError, yaml.YAMLError, AttributeError):
-        return False
-    return any(isinstance(login, dict) and hostname(login.get("url", "")) == host
-               for login in logins)
+        return None
+    return next((login for login in logins
+                 if isinstance(login, dict) and hostname(login.get("url", "")) == host), None)
 
 
 def gh_served(gh: str, host: str) -> bool:
@@ -210,10 +335,12 @@ def choose(host: str | None, path: str) -> Backend:
         return GitHub(gh, served=False)
     if bitbucket_served(host):
         raise HostError(f"the Bitbucket backend is not implemented yet ({host})")
-    if tea_served(host):
-        if not executable("tea"):
+    login = tea_login(host)
+    if login:
+        tea = executable("tea")
+        if not tea:
             raise Unsupported(f"tea login for {host} found, but no tea on PATH")
-        raise HostError(f"the Gitea backend is not implemented yet ({host})")
+        return Gitea(tea, login, path)
     if gh and gh_served(gh, host):
         return GitHub(gh, served=True)
     raise Unsupported(f"no Bitbucket profile, tea login or gh token for {host}")
