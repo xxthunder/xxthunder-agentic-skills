@@ -114,6 +114,9 @@ def expected(name: str) -> State:
                        output="The gate is still red after two fix rounds. How do you want to go on?")
     if name == "loop-green-gate":
         return replace(s, gh_calls=[{"args": ["pr", "create", "--body-file", "-"], "body": PACKAGE_BODY}])
+    if name == "loop-unsupported-remote":
+        return replace(s, output="Unsupported remote: no login serves forge.example.com, so I stop before the pull request. "
+                                 "Which login should I use for it?")
     if name == "loop-open-dispute":
         return replace(s, output="The tester and the implementer still dispute the 503 test after two exchanges. "
                                  "Which of the two is right?")

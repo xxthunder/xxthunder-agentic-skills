@@ -14,7 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from host_fakes import HOST, env, log, repo, run, write_gh
+from host_fakes import (HOST, FakeBitbucket, FakeGitea, env, log, repo, run,
+                        write_bitbucket_profile, write_gh, write_tea, write_tea_config)
 
 GH_URL = "https://github.com/o/r.git"
 BODY = "body.md"
@@ -235,3 +236,120 @@ def test_token_never_printed(tmp_path):
     for o in outputs:
         assert secret not in o.stdout
         assert secret not in o.stderr
+
+
+# ---------- credentials in the remote, missing origin, usage, help ----------
+
+
+def test_remote_credential_never_printed(tmp_path):
+    body = tmp_path / BODY
+    body.write_text("B", encoding="utf-8")
+
+    # unserved host: exit 2, the host is named, the credential is not
+    d1 = tmp_path / "unserved"
+    d1.mkdir()
+    bin_dir = write_gh(d1, token={})
+    work = repo(d1, "https://u:SECRET123@forge.example.com/o/r.git")
+    r1 = run(*pr_args(work, body), env=env(d1, bin_dir))
+    assert r1.returncode == 2
+    assert r1.stderr.startswith("unsupported remote")
+    assert "forge.example.com" in r1.stderr
+
+    # served host, gh fails: exit 3, the credential is not printed
+    d2 = tmp_path / "served"
+    d2.mkdir()
+    bin_dir = write_gh(d2, token={"github.com": "t"}, pr_list="",
+                       fail={"pr create": {"exit": 1, "stderr": "boom from gh\n"}})
+    work = repo(d2, "https://u:SECRET123@github.com/o/r.git")
+    r2 = run(*pr_args(work, body), env=env(d2, bin_dir))
+    assert r2.returncode == 3
+
+    for r in (r1, r2):
+        assert "SECRET123" not in r.stdout
+        assert "SECRET123" not in r.stderr
+
+
+def test_no_origin_is_unsupported(tmp_path):
+    bin_dir = write_gh(tmp_path, token={"github.com": "t"})
+    work = tmp_path / "work"
+    work.mkdir()
+    subprocess.run(["git", "init", "-q", str(work)], check=True, capture_output=True)
+    body = tmp_path / BODY
+    body.write_text("B", encoding="utf-8")
+    r = run(*pr_args(work, body), env=env(tmp_path, bin_dir))
+    assert r.returncode == 2
+    assert "origin" in r.stderr
+
+
+def test_usage_error_is_exit_3(tmp_path):
+    bin_dir = write_gh(tmp_path, token={"github.com": "t"})
+    work = repo(tmp_path, GH_URL)
+    r = run("pr", work, "--base", "develop", "--head", "feat", "--body-file", BODY,
+            env=env(tmp_path, bin_dir))
+    assert r.returncode == 3
+    assert "usage" in r.stderr.lower()
+
+
+def test_help_describes_output(tmp_path):
+    r = run("--help", env=env(tmp_path, write_gh(tmp_path)))
+    assert r.returncode == 0, r.stderr
+    assert "url" in r.stdout
+    assert "unsupported remote" in r.stdout
+    for backend in ("GitHub", "Gitea", "Bitbucket"):
+        assert backend in r.stdout
+
+
+def test_relative_body_file_github(tmp_path):
+    bin_dir = write_gh(tmp_path, token={"github.com": "t"}, pr_list="",
+                       create_url="https://github.com/o/r/pull/7")
+    work = repo(tmp_path, GH_URL)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / BODY).write_text("the relative body", encoding="utf-8")
+    r = run("pr", work, "--base", "develop", "--head", "feat", "--title", "T",
+            "--body-file", BODY, env=env(tmp_path, bin_dir), cwd=elsewhere)
+    assert r.returncode == 0, r.stderr
+    assert (tmp_path / "fake-log.jsonl.body").read_text(encoding="utf-8") == "the relative body"
+
+
+# ---------- backend precedence on one host ----------
+
+
+def test_backend_precedence_same_host(tmp_path):
+    body = tmp_path / BODY
+    body.write_text("B", encoding="utf-8")
+
+    # Bitbucket profile, tea login and gh token all serve 127.0.0.1: Bitbucket wins
+    d1 = tmp_path / "bb"
+    d1.mkdir()
+    bb = FakeBitbucket().start()
+    try:
+        bb.created = {"links": {"self": [{"href": "http://127.0.0.1/pull/1"}]}}
+        write_bitbucket_profile(d1, bb.port)
+        write_tea_config(d1, bb.port)
+        bin_dir = write_gh(d1, token={"127.0.0.1": "t"})
+        work = repo(d1, f"http://127.0.0.1:{bb.port}/scm/PROJ/repo.git")
+        r1 = run(*pr_args(work, body), env=env(d1, bin_dir))
+    finally:
+        bb.stop()
+    assert r1.returncode == 0, r1.stderr
+    assert json.loads(r1.stdout)["backend"] == "bitbucket"
+
+    # tea login and gh token serve 127.0.0.1: Gitea wins
+    d2 = tmp_path / "gitea"
+    d2.mkdir()
+    gitea = FakeGitea(d2 / "tea-created").start()
+    try:
+        gitea.pulls_after = [{"number": 5, "html_url": "http://127.0.0.1/o/r/pulls/5",
+                              "head": {"ref": "feat", "sha": "abc"}}]
+        write_tea_config(d2, gitea.port)
+        write_gh(d2, token={"127.0.0.1": "t"})
+        bin_dir = write_tea(d2)
+        work = repo(d2, f"http://127.0.0.1:{gitea.port}/o/r.git")
+        e = env(d2, bin_dir)
+        e["FAKE_TEA_MARK"] = str(d2 / "tea-created")
+        r2 = run(*pr_args(work, body), env=e)
+    finally:
+        gitea.stop()
+    assert r2.returncode == 0, r2.stderr
+    assert json.loads(r2.stdout)["backend"] == "gitea"
