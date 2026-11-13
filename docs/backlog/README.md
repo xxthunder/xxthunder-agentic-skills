@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-092 — The closed loop takes the ESE 2026 live-demo story DEMO-002 from the board to a green pull request](xas-092.md)
 - [XAS-091 — Subprocess coverage measures only the scripts under test, not the test fakes](xas-091.md)
 - [XAS-090 — The closed loop's GitHub checks wait for the pushed commit, and an eval covers the CI as the gate](xas-090.md)
 - [XAS-089 — The implementer commits its own change of a unit with commit-impl](xas-089.md)
