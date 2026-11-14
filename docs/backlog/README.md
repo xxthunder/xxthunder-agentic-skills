@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-094 — The closed loop's GitHub checks never read an empty check list as green, and name the checks they read](xas-094.md)
 - [XAS-093 — A board card links an item in a personal Bitbucket Server repository](xas-093.md)
 - [XAS-092 — The closed loop takes the demo story DEMO-002 from the board to a green pull request](xas-092.md)
 - [XAS-091 — Subprocess coverage measures only the scripts under test, not the test fakes](xas-091.md)
