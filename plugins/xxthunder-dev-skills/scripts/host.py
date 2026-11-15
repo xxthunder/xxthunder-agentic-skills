@@ -16,12 +16,13 @@ Subcommands (output is JSON on stdout, errors go to stderr):
          [--timeout <seconds, default 7200>]
       Waits until the checks on <head> are done:
       {"backend", "state": "green"|"red", "checks": [{"name", "state"}]}.
-      GitHub: `gh pr checks --watch` waits; exit 0 is green, exit 1 with its check table
-      is red, any other failure of gh is exit 3 (exit 2 on a remote without a host);
-      checks is []. gh reads the pull request's current head, so right after a push it
-      may report the previous commit's result, or "no checks reported" (exit 3), as
-      before XAS-087; --interval and --timeout do not apply to it. A follow-up item
-      makes GitHub wait for the pushed commit.
+      GitHub: polls `gh pr view <head> --json statusCheckRollup` every --interval
+      seconds until at least one check is reported and every one is final. Green only
+      when all passed (SUCCESS, NEUTRAL, SKIPPED; a status SUCCESS); checks lists each
+      as {"name", "state"}. No verdict within
+      --timeout (no check reported, or one still running) is exit 3. It reads the
+      pull request's current head, so right after a push it may still read the previous
+      commit, until XAS-090.
 
 The remote is the raw `remote.origin.url` of <worktree>. The backend is the first that
 serves its host, in this order:
@@ -181,16 +182,42 @@ class GitHub:
             raise self.error("gh pr create printed no pull request URL")
         return "created", lines[-1]
 
+    PASSED = {"SUCCESS", "NEUTRAL", "SKIPPED"}
+
     def checks(self, worktree: str, head: str, interval: float,
                timeout: float) -> tuple[bool, list[dict]]:
-        out = run(self.gh, "pr", "checks", head, "--watch", cwd=worktree, timeout=timeout)
-        if out.returncode == 0:
-            return True, []
-        # Exit 1 with the check table means a check failed; anything else (exit 8
-        # pending, "no checks reported", auth) is gh failing, not the CI.
-        if out.returncode == 1 and out.stdout.strip():
-            return False, []
-        raise self.error(message(out, f"gh pr checks failed with exit {out.returncode}"))
+        deadline = time.monotonic() + timeout
+
+        def poll():
+            # No single call runs past the deadline: a hung gh is exit 3, not a hang.
+            left = max(deadline - time.monotonic(), 0.001)
+            out = self.call(worktree, "pr", "view", head, "--json", "statusCheckRollup",
+                            timeout=left)
+            try:
+                rollup = json.loads(out.stdout).get("statusCheckRollup")
+            except (ValueError, AttributeError):
+                raise HostError(f"gh pr view {head} did not print a JSON object") from None
+            if not isinstance(rollup, list):
+                raise HostError(f"gh pr view {head} answer without a statusCheckRollup list")
+            entries = []
+            for entry in rollup:
+                if not isinstance(entry, dict):
+                    raise HostError(f"gh pr view {head}: a check in statusCheckRollup "
+                                    "is not an object")
+                if entry.get("__typename") == "StatusContext":
+                    name, state = entry.get("context"), entry.get("state")
+                    final = state not in ("PENDING", "EXPECTED")
+                else:
+                    name, state = entry.get("name"), entry.get("conclusion")
+                    final = entry.get("status") == "COMPLETED"
+                entries.append((final, {"name": name, "state": state}))
+            # None reported, or one still running: keep waiting, never green.
+            if not entries or not all(final for final, _ in entries):
+                return None
+            checks = [check for _, check in entries]
+            return all(c["state"] in self.PASSED for c in checks), checks
+
+        return wait_for(poll, head, interval, timeout)
 
 
 # ---------- REST helpers (Gitea, Bitbucket) ----------

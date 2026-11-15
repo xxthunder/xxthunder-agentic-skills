@@ -87,23 +87,114 @@ def test_github_pr_updates_open_pr(tmp_path):
     assert not [c for c in calls if c[:2] == ["pr", "create"]]
 
 
-RED_TABLE = "build\tfail\t1m\thttps://example.com/run/1\n"
+def run_(name, conclusion, status="COMPLETED"):
+    """A CheckRun entry of `gh pr view --json statusCheckRollup`."""
+    return {"__typename": "CheckRun", "name": name, "status": status,
+            "conclusion": conclusion}
 
 
-@pytest.mark.parametrize("checks_exit, checks_stdout, code, state", [
-    (0, "", 0, "green"),
-    (1, RED_TABLE, 1, "red"),
+def ctx(context, state):
+    """A StatusContext entry of `gh pr view --json statusCheckRollup`."""
+    return {"__typename": "StatusContext", "context": context, "state": state}
+
+
+def views(tmp_path):
+    return [c for c in log(tmp_path) if c[:2] == ["pr", "view"]]
+
+
+def checks(tmp_path, *extra, **gh_config):
+    """Run `host.py checks` on GitHub against a fake `gh` configured by gh_config."""
+    bin_dir = write_gh(tmp_path, token={"github.com": "t"}, **gh_config)
+    return run("checks", repo(tmp_path, GH_URL), "--head", "feat", *extra,
+               env=env(tmp_path, bin_dir))
+
+
+def test_github_checks_green_lists_checks(tmp_path):
+    r = checks(tmp_path, rollups=[[run_("build", "SUCCESS"), ctx("ci/lint", "SUCCESS")]])
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == {
+        "backend": "github", "state": "green",
+        "checks": [{"name": "build", "state": "SUCCESS"},
+                   {"name": "ci/lint", "state": "SUCCESS"}],
+    }
+    calls = log(tmp_path)
+    assert ["pr", "view", "feat", "--json", "statusCheckRollup"] in calls
+    assert not [c for c in calls if c[:2] == ["pr", "checks"]]
+
+
+def test_github_checks_red_lists_green_and_red(tmp_path):
+    r = checks(tmp_path, rollups=[[run_("build", "SUCCESS"), run_("test", "FAILURE")]])
+    assert r.returncode == 1, r.stderr
+    assert json.loads(r.stdout) == {
+        "backend": "github", "state": "red",
+        "checks": [{"name": "build", "state": "SUCCESS"},
+                   {"name": "test", "state": "FAILURE"}],
+    }
+
+
+def test_github_checks_waits_for_a_first_check(tmp_path):
+    r = checks(tmp_path, "--interval", "0", rollups=[[], [run_("build", "SUCCESS")]])
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["state"] == "green"
+    assert len(views(tmp_path)) == 2
+
+
+@pytest.mark.parametrize("pending", [
+    run_("test", "", "IN_PROGRESS"),
+    run_("test", "", "QUEUED"),
+    ctx("ci/x", "PENDING"),
+    ctx("ci/x", "EXPECTED"),
 ])
-def test_github_checks(tmp_path, checks_exit, checks_stdout, code, state):
-    bin_dir = write_gh(tmp_path, token={"github.com": "t"}, checks_exit=checks_exit,
-                       checks_stdout=checks_stdout)
-    work = repo(tmp_path, GH_URL)
-    r = run("checks", work, "--head", "feat", env=env(tmp_path, bin_dir))
-    assert r.returncode == code, r.stderr
+def test_github_checks_waits_while_a_check_runs(tmp_path, pending):
+    r = checks(tmp_path, "--interval", "0", rollups=[
+        [run_("build", "SUCCESS"), pending],
+        [run_("build", "SUCCESS"), run_("test", "SUCCESS")],
+    ])
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["state"] == "green"
+    assert len(views(tmp_path)) == 2
+
+
+def test_github_checks_never_reported_times_out(tmp_path):
+    r = checks(tmp_path, "--interval", "0.05", "--timeout", "2", rollups=[[]])
+    assert r.returncode == 3
+    assert "timed out" in r.stderr
+    assert r.stdout == ""
+    assert len(views(tmp_path)) >= 2
+
+
+def test_github_checks_skipped_and_neutral_pass(tmp_path):
+    r = checks(tmp_path, rollups=[[run_("build", "SUCCESS"), run_("docs", "SKIPPED"),
+                                   run_("lint", "NEUTRAL")]])
+    assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
-    assert out["backend"] == "github"
-    assert out["state"] == state
-    assert ["pr", "checks", "feat", "--watch"] in log(tmp_path)
+    assert out["state"] == "green"
+    assert out["checks"] == [{"name": "build", "state": "SUCCESS"},
+                             {"name": "docs", "state": "SKIPPED"},
+                             {"name": "lint", "state": "NEUTRAL"}]
+
+
+def test_github_checks_hung_view_is_bounded_by_timeout(tmp_path):
+    r = checks(tmp_path, "--interval", "0.05", "--timeout", "1", view_sleep=5,
+               rollups=[[run_("build", "SUCCESS")]])
+    assert r.returncode == 3
+    assert "timed out" in r.stderr
+
+
+@pytest.mark.parametrize("failed", [
+    run_("x", "FAILURE"),
+    run_("x", "CANCELLED"),
+    run_("x", "TIMED_OUT"),
+    run_("x", "ACTION_REQUIRED"),
+    run_("x", "STARTUP_FAILURE"),
+    run_("x", "STALE"),
+    ctx("x", "FAILURE"),
+    ctx("x", "ERROR"),
+])
+def test_github_checks_red_conclusions(tmp_path, failed):
+    r = checks(tmp_path, rollups=[[run_("build", "SUCCESS"), failed]])
+    assert r.returncode == 1, r.stderr
+    assert json.loads(r.stdout)["state"] == "red"
 
 
 # ---------- backend choice and exit codes ----------
@@ -169,31 +260,29 @@ def test_gh_failure_on_served_host_is_exit_3(tmp_path):
     assert "boom from gh" in r.stderr
 
 
-NO_CHECKS = "no checks reported on the 'feat' branch\n"
+NO_PR = {"pr view": {"exit": 1, "stderr": "no pull requests found for branch \"feat\"\n"}}
 
 
 def test_github_checks_gh_error_on_served_host_is_exit_3(tmp_path):
-    bin_dir = write_gh(tmp_path, token={"github.com": "t"}, checks_exit=1,
-                       checks_stderr=NO_CHECKS)
-    work = repo(tmp_path, GH_URL)
-    r = run("checks", work, "--head", "feat", env=env(tmp_path, bin_dir))
+    r = checks(tmp_path, fail=NO_PR)
     assert r.returncode == 3
-    assert "no checks reported on the 'feat' branch" in r.stderr
-
-
-def test_github_checks_pending_exit_8_is_exit_3(tmp_path):
-    bin_dir = write_gh(tmp_path, token={"github.com": "t"}, checks_exit=8)
-    work = repo(tmp_path, GH_URL)
-    r = run("checks", work, "--head", "feat", env=env(tmp_path, bin_dir))
-    assert r.returncode == 3
+    assert 'no pull requests found for branch "feat"' in r.stderr
 
 
 def test_github_checks_hostless_gh_error_is_unsupported(tmp_path):
-    bin_dir = write_gh(tmp_path, checks_exit=1, checks_stderr=NO_CHECKS)
+    bin_dir = write_gh(tmp_path, fail=NO_PR)
     work = repo(tmp_path, str(bare_repo(tmp_path)))
     r = run("checks", work, "--head", "feat", env=env(tmp_path, bin_dir))
     assert r.returncode == 2
     assert r.stderr.startswith("unsupported remote")
+
+
+@pytest.mark.parametrize("view_raw", ["{}", "not json", '{"statusCheckRollup": ["x"]}'])
+def test_github_checks_answer_without_rollup_is_exit_3(tmp_path, view_raw):
+    r = checks(tmp_path, view_raw=view_raw)
+    assert r.returncode == 3
+    assert r.stderr != ""
+    assert "Traceback" not in r.stderr
 
 
 # ---------- remote parsing and secrets ----------
@@ -220,8 +309,8 @@ def test_token_never_printed(tmp_path):
     # checks, red path
     d2 = tmp_path / "red"
     d2.mkdir()
-    bin_dir = write_gh(d2, token={"github.com": secret}, checks_exit=1,
-                       checks_stdout=RED_TABLE)
+    bin_dir = write_gh(d2, token={"github.com": secret},
+                       rollups=[[run_("build", "FAILURE")]])
     outputs.append(run("checks", repo(d2, GH_URL), "--head", "feat",
                        env=env(d2, bin_dir)))
 
