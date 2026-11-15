@@ -11,7 +11,6 @@
 ### Open
 - [XAS-096 — The evidence package's steps name the pull request without its number](xas-096.md)
 - [XAS-095 — The closed loop opens the pull request where the host's CLI login is, also for a repository with a dev container](xas-095.md)
-- [XAS-094 — The closed loop's GitHub checks never read an empty check list as green, and name the checks they read](xas-094.md)
 - [XAS-093 — A board card links an item in a personal Bitbucket Server repository](xas-093.md)
 - [XAS-092 — The closed loop takes the demo story DEMO-002 from the board to a green pull request](xas-092.md)
 - [XAS-091 — Subprocess coverage measures only the scripts under test, not the test fakes](xas-091.md)
@@ -65,6 +64,7 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
+- [XAS-094 — The closed loop's GitHub checks never read an empty check list as green, and name the checks they read](xas-094.md)
 - [XAS-087 — The closed loop talks to its host through one script, with backends for GitHub, Gitea and Bitbucket Server](xas-087.md)
 - [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
 - [XAS-044a — ADR: requirements become a binding design artifact where sphinx-needs is in use](xas-044a.md)
