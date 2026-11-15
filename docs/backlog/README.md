@@ -9,6 +9,8 @@
 ## Table of Contents
 
 ### Open
+- [XAS-096 — The evidence package's steps name the pull request without its number](xas-096.md)
+- [XAS-095 — The closed loop opens the pull request where the host's CLI login is, also for a repository with a dev container](xas-095.md)
 - [XAS-094 — The closed loop's GitHub checks never read an empty check list as green, and name the checks they read](xas-094.md)
 - [XAS-093 — A board card links an item in a personal Bitbucket Server repository](xas-093.md)
 - [XAS-092 — The closed loop takes the demo story DEMO-002 from the board to a green pull request](xas-092.md)
