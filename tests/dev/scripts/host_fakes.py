@@ -24,6 +24,7 @@ GH_FAKE = '''\
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 args = sys.argv[1:]
@@ -54,10 +55,18 @@ if key in ("pr create", "pr edit") and "--body-file" in args:
 if key == "pr create":
     print(cfg.get("create_url", ""))
     sys.exit(0)
-if key == "pr checks":
-    sys.stdout.write(cfg.get("checks_stdout", ""))
-    sys.stderr.write(cfg.get("checks_stderr", ""))
-    sys.exit(cfg.get("checks_exit", 0))
+if key == "pr view":
+    if "view_sleep" in cfg:
+        time.sleep(cfg["view_sleep"])
+    if "view_raw" in cfg:
+        sys.stdout.write(cfg["view_raw"])
+        sys.exit(0)
+    rollups = cfg.get("rollups", [[]])
+    # the n-th `pr view` call, counted from the lines already in the log
+    with open(os.environ["FAKE_LOG"], encoding="utf-8") as f:
+        n = sum(1 for line in f if json.loads(line)[:2] == ["pr", "view"]) - 1
+    print(json.dumps({"statusCheckRollup": rollups[min(n, len(rollups) - 1)]}))
+    sys.exit(0)
 sys.exit(0)
 '''
 
@@ -78,8 +87,10 @@ def fake_bin(tmp_path: Path, name: str, script: str) -> Path:
 def write_gh(tmp_path: Path, **config) -> Path:
     """Install the fake `gh` answering from `config`; return its directory.
 
-    config keys: token {host: token}, pr_list, create_url, checks_exit, checks_stdout, checks_stderr,
-    fail {"pr create": {"exit": 1, "stderr": "..."}}.
+    config keys: token {host: token}, pr_list, create_url,
+    rollups [[entry, ...], ...] (the statusCheckRollup that the n-th `pr view` call answers; the
+    last list repeats), view_sleep (seconds `pr view` sleeps before answering), view_raw (a string `pr view` prints verbatim instead),
+    fail {"pr create": {"exit": 1, "stderr": "..."}} (also "pr view").
     """
     (tmp_path / "fake-gh.json").write_text(json.dumps(config), encoding="utf-8")
     return fake_bin(tmp_path, "gh", GH_FAKE)
