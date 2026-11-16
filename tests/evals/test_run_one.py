@@ -116,3 +116,10 @@ def test_run_one_seeds_the_jira_card_when_the_case_asks(tmp_path):
     run_one(case("report", jira_card=True), [], 1, tmp_path)
     board = (tmp_path / "fake-1" / "store" / "engineering" / "board.md").read_text(encoding="utf-8")
     assert "OPS-041" in board
+
+
+def test_the_session_runs_with_its_own_home_holding_a_git_identity(tmp_path):
+    run_one(case("report"), [], 1, tmp_path)
+    home = tmp_path / "fake-1" / "home"
+    assert Path(answer(tmp_path / "fake-1")["HOME"]).resolve() == home.resolve()
+    assert "Eval" in (home / ".gitconfig").read_text(encoding="utf-8")
