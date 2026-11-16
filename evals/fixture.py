@@ -164,10 +164,16 @@ def text_files(root: Path) -> dict[str, str]:
     return out
 
 
-def committed_files(bare: Path) -> dict[str, str]:
-    """Every file on the default branch of a bare repo, keyed by path."""
-    return {name: git(bare, "show", f"{BRANCH}:{name}")
-            for name in git(bare, "ls-tree", "-r", "--name-only", BRANCH).splitlines()}
+def committed_files(bare: Path, ref: str = BRANCH) -> dict[str, str]:
+    """Every text file on *ref* (the default branch) of a bare repo, keyed by path."""
+    out = {}
+    for name in git(bare, "ls-tree", "-r", "--name-only", ref).splitlines():
+        blob = subprocess.run(["git", "show", f"{ref}:{name}"], cwd=bare, capture_output=True, check=True).stdout
+        try:
+            out[name] = blob.decode("utf-8").replace("\r\n", "\n")
+        except UnicodeDecodeError:
+            continue
+    return out
 
 
 @dataclass
@@ -190,6 +196,9 @@ class State:
     demo_branches: list[str] = field(default_factory=list)       # local branches of the demo checkout
     demo_remote_branches: list[str] = field(default_factory=list)  # branches of the demo remote
     demo_gate_by_branch: dict[str, str] = field(default_factory=dict)  # scripts/gate on each local branch that has one
+    # each branch of the demo remote but develop: its subjects not on develop (newest first), its text files
+    demo_remote_branch_subjects: dict[str, list[str]] = field(default_factory=dict)
+    demo_remote_branch_files: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 def snapshot(sandbox: Path, output: str, skills: list[str], commands: list[str] | None = None) -> State:
@@ -218,6 +227,9 @@ def snapshot(sandbox: Path, output: str, skills: list[str], commands: list[str] 
         r = subprocess.run(["git", "show", f"{b}:scripts/gate"], cwd=demo, capture_output=True, text=True, encoding="utf-8")
         if r.returncode == 0:
             gates[b] = r.stdout
+    demo_bare = sandbox / "remotes" / "demo.git"
+    remote_branches = git(demo_bare, "branch", "--format=%(refname:short)").split()
+    features = [b for b in remote_branches if b != BRANCH]
     return State(nxt, prog, commits[:-1], status, git(demo, "status", "--porcelain"),
                  demo_log, output, skills,
                  demo_local_subjects=local,
@@ -228,5 +240,8 @@ def snapshot(sandbox: Path, output: str, skills: list[str], commands: list[str] 
                  gh_calls=gh_calls,
                  loop_state=(json.loads(state_file.read_text(encoding="utf-8")) if state_file.exists() else {}),
                  demo_branches=branches,
-                 demo_remote_branches=git(sandbox / "remotes" / "demo.git", "branch", "--format=%(refname:short)").split(),
-                 demo_gate_by_branch=gates)
+                 demo_remote_branches=remote_branches,
+                 demo_gate_by_branch=gates,
+                 demo_remote_branch_subjects={b: git(demo_bare, "log", "--format=%s", f"{BRANCH}..{b}").splitlines()
+                                              for b in features},
+                 demo_remote_branch_files={b: committed_files(demo_bare, b) for b in features})

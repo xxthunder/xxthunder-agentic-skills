@@ -6,9 +6,11 @@ give every skill of `xxthunder-dev-skills` at least one case (XAS-047).
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
+import tempfile
 import tomllib
 from dataclasses import dataclass
 from datetime import date
@@ -16,7 +18,8 @@ from pathlib import Path
 from typing import Callable
 
 from evals.board import BOARD_FILE, card, ids, jira_card
-from evals.fixture import FIXTURES, IDENTITY, INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, JIRA_ISSUES, State, display_id
+from evals.fake_ci import CI_CHECK, HEALTH_DOC, HEALTH_MARKER
+from evals.fixture import EVAL_EMAIL, EVAL_NAME, FIXTURES, IDENTITY, INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, JIRA_ISSUES, State, display_id
 
 LOG_FILE = "engineering/log.md"
 HUB_FILE = "learnings/README.md"
@@ -511,21 +514,27 @@ def check_drift(s: State) -> list[str]:
 FEATURE_BRANCH = "feature/DEMO-007-health-endpoint"
 
 
-def setup_feature_branch(demo: Path) -> None:
-    subprocess.run(["git", "checkout", "-q", "-b", FEATURE_BRANCH], cwd=demo, check=True)
-    (demo / "docs" / "health.md").write_text(
+def stage_health_doc(demo: Path) -> None:
+    (demo / HEALTH_DOC).write_text(
         "# Health endpoint\n\n`GET /health` answers 200 while the sync job ran in the last two hours.\n",
         encoding="utf-8", newline="\n")
-    subprocess.run(["git", "add", "docs/health.md"], cwd=demo, check=True)
+    subprocess.run(["git", "add", HEALTH_DOC], cwd=demo, check=True)
+
+
+def setup_feature_branch(demo: Path) -> None:
+    subprocess.run(["git", "checkout", "-q", "-b", FEATURE_BRANCH], cwd=demo, check=True)
+    stage_health_doc(demo)
 
 
 LOOP_DISPUTE = ("The test pins `GET /health` to answer 200 even when the sync job never ran; "
                 "the item says it must answer 503 then.")
 
 
+LOOP_SCRIPT = Path(__file__).resolve().parents[1] / "plugins" / "xxthunder-dev-skills" / "scripts" / "loop.py"
+
+
 def loop_state(demo: Path, *pairs: str) -> None:
-    script = Path(__file__).resolve().parents[1] / "plugins" / "xxthunder-dev-skills" / "scripts" / "loop.py"
-    subprocess.run([sys.executable, str(script), "state", str(demo), *pairs],
+    subprocess.run([sys.executable, str(LOOP_SCRIPT), "state", str(demo), *pairs],
                    check=True, capture_output=True, text=True)
 
 
@@ -690,20 +699,114 @@ GATE_NAMED_RE = re.compile(r"named by the repo|repository names|names? (its|the)
 GATE_OTHER_RE = re.compile(r"derived|correction|workflow|abgeleitet|Korrektur", re.I)
 
 
+GATE_RESULT_RE = re.compile(r"exit(ed)?\s*(code\s*)?0|green|pass", re.I)
+
+
+def package_sections(body: str) -> list[str]:
+    """What keeps *body* from being the evidence package: a missing section, or the order."""
+    at = [(m.start() if (m := heading_re(n).search(body)) else -1) for n in PACKAGE_SECTIONS]
+    return (expect(-1 not in at, f"package sections missing: {[n for n, a in zip(PACKAGE_SECTIONS, at) if a < 0]}")
+            + expect(at == sorted(at), f"package sections out of order: {dict(zip(PACKAGE_SECTIONS, at))}"))
+
+
 def check_loop_green_gate(s: State) -> list[str]:
     calls = pr_calls(s)
     f = expect(len(calls) == 1, f"pr create calls: {len(calls)}") + expect(not pr_calls(s, "merge"), "the loop merged")
     if len(calls) != 1:
         return f
     body = calls[0]["body"] or ""
-    at = [(m.start() if (m := heading_re(n).search(body)) else -1) for n in PACKAGE_SECTIONS]
-    f += expect(-1 not in at, f"package sections missing: {[n for n, a in zip(PACKAGE_SECTIONS, at) if a < 0]}")
-    f += expect(at == sorted(at), f"package sections out of order: {dict(zip(PACKAGE_SECTIONS, at))}")
+    f += package_sections(body)
     gate = section(body, "Gate") or ""
     return (f + expect("scripts/gate" in gate, "Gate section does not name scripts/gate")
             + expect(bool(GATE_NAMED_RE.search(gate)) and not GATE_OTHER_RE.search(gate),
                      "Gate section does not say the repository names its gate (or says derived/correction)")
-            + expect(bool(re.search(r"exit(ed)?\s*(code\s*)?0|green|pass", gate, re.I)), "Gate section has no result"))
+            + expect(bool(GATE_RESULT_RE.search(gate)), "Gate section has no result"))
+
+
+CI_WORKFLOW = ".github/workflows/ci.yml"
+CI_LINT = "scripts/docs-lint.ps1"
+CI_FILES = {
+    CI_WORKFLOW: ("name: CI\n\non:\n  pull_request:\n\njobs:\n  docs-lint:\n"
+                  f"    name: {CI_CHECK}\n    runs-on: windows-latest\n    steps:\n"
+                  "      - uses: actions/checkout@v4\n      - name: Lint the docs\n"
+                  f"        shell: pwsh\n        run: ./{CI_LINT}\n"),
+    CI_LINT: ("$ErrorActionPreference = 'Stop'\n"
+              f"if ((Get-Content -Raw {HEALTH_DOC}) -notmatch '{HEALTH_MARKER}') {{\n"
+              f"    Write-Output '{HEALTH_DOC} must name the {HEALTH_MARKER} answer'\n    exit 1\n}}\n"
+              f"Write-Output '{HEALTH_DOC} names the {HEALTH_MARKER} answer'\n"),
+}
+CI_LOOP_SECTION = (
+    "\n## Closed loop\n\n"
+    "- **Gate**: `scripts/gate`, run from the repository root.\n"
+    f"- **The CI is the gate as well**: its job `{CI_CHECK}` runs `{CI_LINT}` on the CI's Windows "
+    "runner only, so it cannot run here.\n")
+HEALTH_TEST = "tests/test_health.py"
+CI_PASSED_RE = re.compile(r"\b(green|pass(ed|es|ing)?|succe(ss(ful)?|eded))\b|\u2705", re.I)
+
+
+def setup_loop_ci_gate(demo: Path) -> None:
+    """A repository whose CI is the gate as well, the loop at its gate step: a `Closed loop` section,
+    `scripts/gate` and a Windows-only CI check on develop; on the branch of DEMO-007 a tester commit
+    and the implementer's `amend!` of it, whose docs/health.md the CI check rejects. Nothing of the
+    branch is pushed."""
+    setup_gate(demo, 0)
+    with (demo / "AGENTS.md").open("a", encoding="utf-8", newline="\n") as f:
+        f.write(CI_LOOP_SECTION)
+    for path, text in CI_FILES.items():
+        (demo / path).parent.mkdir(parents=True, exist_ok=True)
+        (demo / path).write_text(text, encoding="utf-8", newline="\n")
+    subprocess.run(["git", "add", "AGENTS.md", *CI_FILES], cwd=demo, check=True)
+    subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "ci: lint the docs on Windows"], cwd=demo, check=True)
+    subprocess.run(["git", "push", "-q", "origin", "develop"], cwd=demo, check=True)
+    develop = subprocess.run(["git", "rev-parse", "HEAD"], cwd=demo, check=True, capture_output=True,
+                             text=True).stdout.strip()
+    subprocess.run(["git", "checkout", "-q", "-b", FEATURE_BRANCH], cwd=demo, check=True)
+    (demo / HEALTH_TEST).parent.mkdir(exist_ok=True)
+    (demo / HEALTH_TEST).write_text("def test_health():\n    assert True\n", encoding="utf-8", newline="\n")
+    subprocess.run(["git", "add", HEALTH_TEST], cwd=demo, check=True)
+    subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "test: the health endpoint (DEMO-007)"],
+                   cwd=demo, check=True)
+    tester = subprocess.run(["git", "rev-parse", "HEAD"], cwd=demo, check=True, capture_output=True,
+                            text=True).stdout.strip()
+    stage_health_doc(demo)
+    # loop.py runs a bare `git commit`: the identity comes from the environment, not the machine
+    identity = {f"GIT_{who}_{what}": value for who in ("AUTHOR", "COMMITTER")
+                for what, value in (("NAME", EVAL_NAME), ("EMAIL", EVAL_EMAIL))}
+    with tempfile.TemporaryDirectory() as tmp:
+        message = Path(tmp) / "message.txt"
+        message.write_text("feat: health endpoint (DEMO-007)\n", encoding="utf-8", newline="\n")
+        subprocess.run([sys.executable, str(LOOP_SCRIPT), "commit-impl", str(demo), tester, str(message)],
+                       cwd=demo, check=True, capture_output=True, env={**os.environ, **identity})
+    loop_state(demo, "item=DEMO-007", f"branch={FEATURE_BRANCH}", "step=gate", "fix_rounds=0", "exchanges=0",
+               f"tests_1={develop}..{tester}")
+
+
+def check_loop_ci_gate(s: State) -> list[str]:
+    creates, edits = pr_calls(s), pr_calls(s, "edit")
+    f = (expect(len(creates) == 1, f"pr create calls: {len(creates)}")
+         + expect(not pr_calls(s, "merge"), "the loop merged")
+         + expect(bool(edits), "the pull request was never updated with the package"))
+    if creates:
+        f += expect(bool(package_sections(creates[0]["body"] or "")), "the first pull request body is already the package")
+    if edits:
+        body = edits[-1]["body"] or ""
+        gate = section(body, "Gate") or ""
+        f += (package_sections(body)
+              + expect("docs-lint" in gate, "Gate section does not name the CI check docs-lint")
+              + expect(any("docs-lint" in line and CI_PASSED_RE.search(line) for line in gate.splitlines()),
+                       "Gate section has no line that reports docs-lint as passed"))
+    subjects = s.demo_remote_branch_subjects.get(FEATURE_BRANCH)
+    f += expect(subjects is not None and len(subjects) == 1,
+                f"the pushed branch is not one folded commit over develop: {subjects}")
+    files = s.demo_remote_branch_files.get(FEATURE_BRANCH, {})
+    f += expect(HEALTH_TEST in files, f"{HEALTH_TEST} is not on the pushed branch")
+    f += expect(HEALTH_MARKER in files.get(HEALTH_DOC, ""),
+                f"{HEALTH_DOC} on the pushed branch does not name {HEALTH_MARKER}")
+    for path, text in {"scripts/gate": gate_script(0), **CI_FILES}.items():
+        f += expect(files.get(path) == text, f"{path} changed or missing on the pushed branch")
+    return (f + expect(s.loop_state.get("step") == "done", f"step: {s.loop_state.get('step')}")
+            + expect(s.loop_state.get("fix_rounds") == 1, f"fix_rounds: {s.loop_state.get('fix_rounds')}")
+            + expect(bool(s.loop_state.get("pr")), "no pr in the loop state"))
 
 
 def check_loop_no_gate(s: State) -> list[str]:
@@ -741,8 +844,7 @@ def check_commit(s: State) -> list[str]:
 
 def setup_greenfield(demo: Path) -> None:
     subprocess.run(["git", "rm", "-q", "-r", "docs/backlog"], cwd=demo, check=True)
-    subprocess.run(["git", "-c", "user.name=Eval", "-c", "user.email=eval@example.com",
-                    "commit", "-q", "-m", "drop the backlog"], cwd=demo, check=True)
+    subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "drop the backlog"], cwd=demo, check=True)
 
 
 def check_bootstrap(s: State) -> list[str]:
@@ -979,6 +1081,8 @@ CASES = [
          closed_loop=True, setup=lambda demo: setup_loop_at_gate(demo, 1)),
     Case("loop-green-gate", "closed-loop", "continue the loop for DEMO-007", check_loop_green_gate,
          closed_loop=True, setup=lambda demo: setup_loop_at_gate(demo, 0)),
+    Case("loop-ci-gate", "closed-loop", "continue the loop for DEMO-007", check_loop_ci_gate,
+         closed_loop=True, setup=setup_loop_ci_gate),
     Case("loop-unsupported-remote", "closed-loop", "continue the loop for DEMO-007", check_loop_unsupported_remote,
          closed_loop=True, setup=setup_loop_unsupported_remote),
     Case("loop-open-dispute", "closed-loop", "continue the loop for DEMO-007", check_loop_open_dispute,

@@ -123,7 +123,7 @@ def test_snapshot_counts_local_commits_from_the_seed_tag(tmp_path):
     assert s.demo_remote_subjects == []
 
 
-@pytest.mark.parametrize("name", ["commit", "refinement-bootstrap"])
+@pytest.mark.parametrize("name", ["commit", "refinement-bootstrap", "loop-ci-gate"])
 def test_setup_leaves_a_seed_with_no_local_commits(tmp_path, name):
     from evals.cases import CASES
     from evals.fixture import mark_seed
@@ -178,8 +178,9 @@ def test_build_with_jira_card_seeds_it_at_the_bottom_of_next(tmp_path):
 
 # --- XAS-055: fake gh, the Closed loop contract, loop setups ---
 
-def run_fake_gh(sandbox, *args, stdin=None):
-    """Run the fake `gh` the way the sandbox PATH would: as a Python script, `$EVAL_SANDBOX` set."""
+def run_fake_gh(sandbox, *args, stdin=None, cwd=None):
+    """Run the fake `gh` the way the sandbox PATH would: as a Python script, `$EVAL_SANDBOX` set,
+    in *cwd* (the sandbox by default)."""
     import os
     import subprocess
     import sys
@@ -188,7 +189,7 @@ def run_fake_gh(sandbox, *args, stdin=None):
 
     env = {**os.environ, "EVAL_SANDBOX": str(sandbox)}
     return subprocess.run([sys.executable, str(FIXTURES / "bin" / "gh"), *args],
-                          capture_output=True, text=True, encoding="utf-8", env=env, cwd=sandbox, input=stdin)
+                          capture_output=True, text=True, encoding="utf-8", env=env, cwd=cwd or sandbox, input=stdin)
 
 
 def read_calls(sandbox):
@@ -330,9 +331,9 @@ def test_fake_gh_takes_the_body_in_the_equals_form(tmp_path):
 
 
 def test_fake_gh_records_an_unknown_subcommand_and_stays_silent(tmp_path):
-    r = run_fake_gh(tmp_path, "pr", "view", "1")
+    r = run_fake_gh(tmp_path, "repo", "view", "1")
     assert (r.returncode, r.stdout) == (0, "")
-    assert read_calls(tmp_path) == [{"args": ["pr", "view", "1"], "body": None}]
+    assert read_calls(tmp_path) == [{"args": ["repo", "view", "1"], "body": None}]
 
 
 def test_fake_gh_is_an_executable_script_with_a_shebang():
@@ -369,3 +370,371 @@ def test_gh_cmd_runs_python_on_the_gh_script_and_forwards_arguments():
 
     text = (FIXTURES / "bin" / "gh.cmd").read_text(encoding="utf-8")
     assert "python" in text.lower() and "gh" in text and "%*" in text
+
+
+# --- XAS-098: a fake CI behind the fake gh, the remote branches in the snapshot, loop-ci-gate ---
+
+CI_BRANCH = "feature/DEMO-007-health-endpoint"
+CI_URL = "https://example.com/demo/pull/1"
+CI_CHECK = "docs-lint (windows-latest)"
+VIEW = ("--json", "headRefOid,statusCheckRollup")
+
+
+def gh_repo(tmp_path):
+    """A clone with a bare `origin`: `develop` pushed, and CI_BRANCH pushed with a
+    `docs/health.md` that does not name 503. Returns (clone, sandbox), the sandbox apart."""
+    from evals.fixture import IDENTITY, git, write
+
+    git(tmp_path, "init", "-q", "--bare", "-b", "develop", "origin.git")
+    git(tmp_path, "clone", "-q", str(tmp_path / "origin.git"), "repo")
+    repo = tmp_path / "repo"
+    write(repo / "README.md", "# Demo\n")
+    git(repo, "add", "-A")
+    git(repo, *IDENTITY, "commit", "-q", "-m", "init")
+    git(repo, "push", "-q", "-u", "origin", "develop")
+    git(repo, "checkout", "-q", "-b", CI_BRANCH)
+    write(repo / "docs" / "health.md", "# Health endpoint\n\n`GET /health` answers 200.\n")
+    git(repo, "add", "-A")
+    git(repo, *IDENTITY, "commit", "-q", "-m", "feat: health endpoint (DEMO-007)")
+    git(repo, "push", "-q", "-u", "origin", CI_BRANCH)
+    sandbox = tmp_path / "sb"
+    sandbox.mkdir()
+    return repo, sandbox
+
+
+def pushed_sha(repo, branch=CI_BRANCH):
+    from evals.fixture import git
+
+    return git(repo, "ls-remote", "origin", f"refs/heads/{branch}").split()[0]
+
+
+def commit_health(repo, text, push=True):
+    from evals.fixture import IDENTITY, git, write
+
+    write(repo / "docs" / "health.md", text)
+    git(repo, "add", "-A")
+    git(repo, *IDENTITY, "commit", "-q", "-m", "fix: health")
+    if push:
+        git(repo, "push", "-q", "origin", CI_BRANCH)
+
+
+def create_pr(repo, sandbox, branch=CI_BRANCH):
+    (sandbox / "pr.md").write_text("Interim: the loop waits for the CI.\n", encoding="utf-8")
+    return run_fake_gh(sandbox, "pr", "create", "--base", "develop", "--head", branch,
+                       "--title", "t", "--body-file", str(sandbox / "pr.md"), cwd=repo)
+
+
+def rollup(conclusion):
+    return [{"__typename": "CheckRun", "name": CI_CHECK, "status": "COMPLETED", "conclusion": conclusion}]
+
+
+def test_fake_gh_pr_create_with_head_records_the_pull_request_and_prints_the_url(tmp_path):
+    repo, sandbox = gh_repo(tmp_path)
+    r = create_pr(repo, sandbox)
+    assert (r.returncode, r.stdout.strip()) == (0, CI_URL)
+    assert (sandbox / "gh-prs.json").is_file()
+    assert read_calls(sandbox)[0]["body"] == "Interim: the loop waits for the CI.\n"
+
+
+def test_fake_gh_pr_list_prints_the_url_only_for_a_branch_with_an_open_pull_request(tmp_path):
+    repo, sandbox = gh_repo(tmp_path)
+    args = ("--state", "open", "--json", "url", "--jq", ".[0].url")
+    before = run_fake_gh(sandbox, "pr", "list", "--head", CI_BRANCH, *args, cwd=repo)
+    assert (before.returncode, before.stdout.strip()) == (0, "")
+    create_pr(repo, sandbox)
+    after = run_fake_gh(sandbox, "pr", "list", "--head", CI_BRANCH, *args, cwd=repo)
+    assert (after.returncode, after.stdout.strip()) == (0, CI_URL)
+    other = run_fake_gh(sandbox, "pr", "list", "--head", "feature/other", *args, cwd=repo)
+    assert (other.returncode, other.stdout.strip()) == (0, "")
+
+
+def test_fake_gh_pr_edit_is_silent_and_records_its_body(tmp_path):
+    repo, sandbox = gh_repo(tmp_path)
+    create_pr(repo, sandbox)
+    (sandbox / "package.md").write_text("## Item\n\nDEMO-007\n", encoding="utf-8")
+    r = run_fake_gh(sandbox, "pr", "edit", CI_URL, "--title", "t", "--body-file", str(sandbox / "package.md"), cwd=repo)
+    assert (r.returncode, r.stdout) == (0, "")
+    edit = read_calls(sandbox)[-1]
+    assert edit["args"][:3] == ["pr", "edit", CI_URL] and edit["body"] == "## Item\n\nDEMO-007\n"
+
+
+def test_fake_gh_pr_view_without_a_pull_request_names_the_branch_and_exits_1(tmp_path):
+    repo, sandbox = gh_repo(tmp_path)
+    r = run_fake_gh(sandbox, "pr", "view", CI_BRANCH, *VIEW, cwd=repo)
+    assert r.returncode == 1 and r.stdout == ""
+    assert f'no pull requests found for branch "{CI_BRANCH}"' in r.stderr
+    assert read_calls(sandbox) == [{"args": ["pr", "view", CI_BRANCH, *VIEW], "body": None}]
+
+
+def test_fake_gh_pr_view_without_a_branch_argument_uses_the_current_branch(tmp_path):
+    repo, sandbox = gh_repo(tmp_path)
+    r = run_fake_gh(sandbox, "pr", "view", "--json", "url", cwd=repo)
+    assert r.returncode == 1 and r.stdout == ""
+    assert f'no pull requests found for branch "{CI_BRANCH}"' in r.stderr
+    assert read_calls(sandbox) == [{"args": ["pr", "view", "--json", "url"], "body": None}]
+
+
+def test_fake_gh_pr_view_reports_a_red_check_for_the_pushed_commit_without_503(tmp_path):
+    import json
+
+    repo, sandbox = gh_repo(tmp_path)
+    create_pr(repo, sandbox)
+    r = run_fake_gh(sandbox, "pr", "view", CI_BRANCH, *VIEW, cwd=repo)
+    assert r.returncode == 0
+    assert json.loads(r.stdout) == {"headRefOid": pushed_sha(repo), "statusCheckRollup": rollup("FAILURE")}
+
+
+def test_fake_gh_pr_view_turns_green_once_the_pushed_commit_names_503(tmp_path):
+    import json
+
+    repo, sandbox = gh_repo(tmp_path)
+    create_pr(repo, sandbox)
+    red_sha = pushed_sha(repo)
+    commit_health(repo, "# Health endpoint\n\n`GET /health` answers 503 while the sync job never ran.\n")
+    answer = json.loads(run_fake_gh(sandbox, "pr", "view", CI_BRANCH, *VIEW, cwd=repo).stdout)
+    assert answer["headRefOid"] == pushed_sha(repo) != red_sha
+    assert answer["statusCheckRollup"] == rollup("SUCCESS")
+
+
+def test_fake_gh_pr_view_reads_the_remote_branch_not_the_local_one(tmp_path):
+    import json
+
+    from evals.fixture import git
+
+    repo, sandbox = gh_repo(tmp_path)
+    create_pr(repo, sandbox)
+    pushed = pushed_sha(repo)
+    commit_health(repo, "# Health endpoint\n\nIt answers 503.\n", push=False)
+    assert git(repo, "rev-parse", "HEAD").strip() != pushed
+    answer = json.loads(run_fake_gh(sandbox, "pr", "view", CI_BRANCH, *VIEW, cwd=repo).stdout)
+    assert answer == {"headRefOid": pushed, "statusCheckRollup": rollup("FAILURE")}
+
+
+def test_fake_gh_pr_view_answers_the_same_whatever_the_json_fields(tmp_path):
+    import json
+
+    repo, sandbox = gh_repo(tmp_path)
+    create_pr(repo, sandbox)
+    r = run_fake_gh(sandbox, "pr", "view", CI_BRANCH, "--json", "url", cwd=repo)
+    assert json.loads(r.stdout) == {"headRefOid": pushed_sha(repo), "statusCheckRollup": rollup("FAILURE")}
+
+
+def test_fake_gh_pr_create_without_head_records_the_current_branch(tmp_path):
+    import json
+
+    repo, sandbox = gh_repo(tmp_path)
+    r = run_fake_gh(sandbox, "pr", "create", "--title", "t", "--body", "b", cwd=repo)
+    assert (r.returncode, r.stdout.strip()) == (0, CI_URL)
+    view = run_fake_gh(sandbox, "pr", "view", CI_BRANCH, *VIEW, cwd=repo)
+    assert view.returncode == 0 and json.loads(view.stdout)["headRefOid"] == pushed_sha(repo)
+
+
+def test_fake_gh_writes_one_line_per_call_and_other_subcommands_stay_silent(tmp_path):
+    repo, sandbox = gh_repo(tmp_path)
+    list_args = ["pr", "list", "--head", CI_BRANCH, "--state", "open", "--json", "url", "--jq", ".[0].url"]
+    run_fake_gh(sandbox, *list_args, cwd=repo)
+    run_fake_gh(sandbox, "pr", "view", CI_BRANCH, *VIEW, cwd=repo)
+    create_pr(repo, sandbox)
+    checks = run_fake_gh(sandbox, "pr", "checks", CI_BRANCH, cwd=repo)
+    assert (checks.returncode, checks.stdout) == (0, "")
+    run_fake_gh(sandbox, "pr", "view", CI_BRANCH, *VIEW, cwd=repo)
+    assert [c["args"][:2] for c in read_calls(sandbox)] == [
+        ["pr", "list"], ["pr", "view"], ["pr", "create"], ["pr", "checks"], ["pr", "view"]]
+
+
+def test_snapshot_of_an_untouched_sandbox_has_no_remote_feature_branches(sandbox):
+    s = snapshot(sandbox, "", [])
+    assert s.demo_remote_branch_subjects == {}
+    assert s.demo_remote_branch_files == {}
+
+
+def test_state_defaults_the_remote_feature_branches_to_empty():
+    from evals.fixture import State
+
+    s = State([], [], [], {}, "", [], "")
+    assert (s.demo_remote_branch_subjects, s.demo_remote_branch_files) == ({}, {})
+
+
+def test_snapshot_reads_each_remote_branch_but_develop(tmp_path):
+    from evals.fixture import IDENTITY, git, write
+
+    build(tmp_path)
+    demo = tmp_path / "checkouts" / "demo"
+    git(demo, "checkout", "-q", "-b", "feature/a")
+    for name in ("one", "two"):
+        write(demo / f"{name}.md", f"{name}\n")
+        git(demo, "add", "-A")
+        git(demo, *IDENTITY, "commit", "-q", "-m", f"docs: {name}")
+    (demo / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe")
+    git(demo, "add", "-A")
+    git(demo, *IDENTITY, "commit", "-q", "-m", "docs: logo")
+    git(demo, "push", "-q", "origin", "feature/a")
+    git(demo, "checkout", "-q", "-b", "feature/b", "develop")
+    write(demo / "b.md", "b\n")
+    git(demo, "add", "-A")
+    git(demo, *IDENTITY, "commit", "-q", "-m", "docs: b")
+    git(demo, "push", "-q", "origin", "feature/b")
+    s = snapshot(tmp_path, "", [])
+    assert s.demo_remote_branch_subjects == {"feature/a": ["docs: logo", "docs: two", "docs: one"],
+                                             "feature/b": ["docs: b"]}
+    files = s.demo_remote_branch_files
+    assert set(files) == {"feature/a", "feature/b"}
+    assert files["feature/a"]["one.md"] == "one\n" and files["feature/a"]["two.md"] == "two\n"
+    assert "logo.png" not in files["feature/a"]
+    assert "b.md" in files["feature/b"] and "one.md" not in files["feature/b"]
+    assert "AGENTS.md" in files["feature/b"]  # inherited from develop: the whole tree, not the diff
+
+
+def test_snapshot_reads_a_branch_pushed_from_another_clone(tmp_path):
+    from evals.fixture import IDENTITY, git, write
+
+    build(tmp_path)
+    other = tmp_path / "other"
+    git(tmp_path, "clone", "-q", str(tmp_path / "remotes" / "demo.git"), str(other))
+    git(other, "checkout", "-q", "-b", "feature/c")
+    write(other / "c.md", "c\n")
+    git(other, "add", "-A")
+    git(other, *IDENTITY, "commit", "-q", "-m", "docs: c")
+    git(other, "push", "-q", "origin", "feature/c")
+    s = snapshot(tmp_path, "", [])
+    assert s.demo_remote_branch_subjects == {"feature/c": ["docs: c"]}
+    assert s.demo_remote_branch_files["feature/c"]["c.md"] == "c\n"
+
+
+@pytest.fixture
+def no_machine_identity(tmp_path, monkeypatch):
+    """git sees no identity of the machine: a global config that forbids guessing one."""
+    home = tmp_path / "home"
+    home.mkdir()
+    config = home / "gitconfig"
+    config.write_text("[user]\n\tuseConfigOnly = true\n", encoding="utf-8")
+    for key in ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "EMAIL"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(home / ".config"))
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+
+def ci_gate_demo(tmp_path):
+    from evals.cases import setup_loop_ci_gate
+
+    demo = setup_demo(tmp_path / "sb")
+    setup_loop_ci_gate(demo)
+    return demo
+
+
+def test_setup_loop_ci_gate_puts_the_closed_loop_section_the_ci_and_the_gate_on_develop(tmp_path):
+    from evals.cases import gate_script
+    from evals.fixture import git
+
+    demo = ci_gate_demo(tmp_path)
+    tree = git(demo, "ls-tree", "-r", "--name-only", "develop").splitlines()
+    for path in ("scripts/gate", "scripts/docs-lint.ps1", ".github/workflows/ci.yml"):
+        assert path in tree, path
+    assert git(demo, "rev-parse", "develop") == git(demo, "rev-parse", "origin/develop")
+    assert git(demo, "show", "develop:scripts/gate") == gate_script(0)
+    agents = git(demo, "show", "develop:AGENTS.md")
+    assert agents.startswith("# Demo\n")
+    closed_loop = agents[agents.index("## Closed loop"):]
+    for needle in ("scripts/gate", CI_CHECK, "scripts/docs-lint.ps1", "Windows"):
+        assert needle in closed_loop, needle
+    ci = git(demo, "show", "develop:.github/workflows/ci.yml")
+    for needle in ("pull_request", "docs-lint", "runs-on: windows-latest", "shell: pwsh", "./scripts/docs-lint.ps1"):
+        assert needle in ci, needle
+    lint = git(demo, "show", "develop:scripts/docs-lint.ps1")
+    assert "docs/health.md" in lint and "503" in lint
+    assert "docs/health.md must name the 503 answer" in lint
+
+
+def test_setup_loop_ci_gate_leaves_a_tester_commit_and_an_amend_on_the_feature_branch(tmp_path):
+    from evals.fixture import git
+
+    demo = ci_gate_demo(tmp_path)
+    assert git(demo, "branch", "--show-current").strip() == CI_BRANCH
+    assert git(demo, "status", "--porcelain") == ""
+    state = loop_state(demo)
+    develop_sha, tester_sha = state["tests_1"].split("..")
+    assert develop_sha == git(demo, "rev-parse", "develop").strip()
+    assert tester_sha == git(demo, "rev-parse", "HEAD~1").strip()
+    assert git(demo, "rev-parse", "HEAD~2").strip() == develop_sha
+    assert git(demo, "log", "-1", "--format=%s").strip() == f"amend! {tester_sha}"
+    assert git(demo, "diff", "--name-only", f"{develop_sha}..{tester_sha}").split() == ["tests/test_health.py"]
+    assert git(demo, "diff", "--name-only", f"{tester_sha}..HEAD").split() == ["docs/health.md"]
+    health = git(demo, "show", "HEAD:docs/health.md")
+    assert "GET /health" in health and "503" not in health
+
+
+def test_setup_loop_ci_gate_writes_the_loop_state_at_the_gate(tmp_path):
+    from evals.fixture import git
+
+    demo = ci_gate_demo(tmp_path)
+    state = loop_state(demo)
+    develop_sha = git(demo, "rev-parse", "develop").strip()
+    tester_sha = git(demo, "rev-parse", "HEAD~1").strip()
+    assert state == {"item": "DEMO-007", "branch": CI_BRANCH, "step": "gate", "fix_rounds": 0,
+                     "exchanges": 0, "tests_1": f"{develop_sha}..{tester_sha}"}
+
+
+def test_setup_loop_ci_gate_pushes_no_feature_branch(tmp_path):
+    from evals.fixture import mark_seed
+
+    ci_gate_demo(tmp_path)
+    mark_seed(tmp_path / "sb")
+    s = snapshot(tmp_path / "sb", "", [])
+    assert s.demo_remote_branches == ["develop"]
+    assert s.demo_remote_branch_subjects == {}
+    assert s.demo_local_subjects == []
+
+
+def test_setup_loop_ci_gate_needs_no_git_identity_of_the_machine(tmp_path, no_machine_identity):
+    from evals.fixture import git
+
+    demo = ci_gate_demo(tmp_path)
+    assert git(demo, "log", "-1", "--format=%s").startswith("amend! ")
+
+
+def test_setup_loop_ci_gate_gives_a_red_ci_once_pushed(tmp_path):
+    """The case is coherent: the pushed branch draws a red docs-lint from the fake CI."""
+    import json
+
+    from evals.fixture import git
+
+    demo = ci_gate_demo(tmp_path)
+    sandbox = tmp_path / "sb"
+    git(demo, "push", "-q", "-u", "origin", CI_BRANCH)
+    run_fake_gh(sandbox, "pr", "create", "--base", "develop", "--head", CI_BRANCH,
+                "--title", "t", "--body", "interim", cwd=demo)
+    answer = json.loads(run_fake_gh(sandbox, "pr", "view", CI_BRANCH, *VIEW, cwd=demo).stdout)
+    assert answer == {"headRefOid": git(demo, "rev-parse", "HEAD").strip(), "statusCheckRollup": rollup("FAILURE")}
+
+
+def test_fake_gh_takes_name_value_options_in_the_equals_form(tmp_path):
+    repo, sandbox = gh_repo(tmp_path)
+    r = run_fake_gh(sandbox, "pr", "create", f"--head={CI_BRANCH}", "--title", "t", "--body", "b", cwd=repo)
+    assert (r.returncode, r.stdout.strip()) == (0, CI_URL)
+    listed = run_fake_gh(sandbox, "pr", "list", f"--head={CI_BRANCH}", "--state", "open", "--json", "url",
+                         "--jq", ".[0].url", cwd=repo)
+    assert listed.stdout.strip() == CI_URL
+    other = run_fake_gh(sandbox, "pr", "list", "--head=other", "--state", "open", "--json", "url",
+                        "--jq", ".[0].url", cwd=repo)
+    assert other.stdout.strip() == ""
+
+
+def test_fake_gh_pr_view_fetches_a_commit_pushed_from_another_clone(tmp_path):
+    import json
+
+    from evals.fixture import git
+
+    repo, sandbox = gh_repo(tmp_path)
+    git(tmp_path, "clone", "-q", str(tmp_path / "origin.git"), "other")
+    other = tmp_path / "other"
+    create_pr(other, sandbox)
+    commit_health(repo, "# Health endpoint\n\nIt answers 503.\n")
+    sha = pushed_sha(repo)
+    import subprocess
+
+    assert subprocess.run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], cwd=other).returncode != 0
+    answer = json.loads(run_fake_gh(sandbox, "pr", "view", CI_BRANCH, *VIEW, cwd=other).stdout)
+    assert answer == {"headRefOid": sha, "statusCheckRollup": rollup("SUCCESS")}
