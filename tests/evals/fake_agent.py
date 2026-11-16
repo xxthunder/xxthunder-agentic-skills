@@ -37,7 +37,7 @@ def main() -> None:
             {"type": "tool_use", "name": "Skill", "input": {"skill": "xxthunder-dev-skills:next"}},
             {"type": "tool_use", "name": "Bash", "input": {"command": "git status"}}]}})
         answer = json.dumps({"cwd": os.getcwd(),
-                             **{k: os.environ.get(k) for k in ("BOARD_PATH", "LOGBOOK_PATH", "CLAUDECODE")}})
+                             **{k: os.environ.get(k) for k in ("BOARD_PATH", "LOGBOOK_PATH", "CLAUDECODE", "HOME")}})
     print("a warning on stderr", file=sys.stderr)
     emit({"type": "result", "subtype": "success", "result": answer})
 

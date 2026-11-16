@@ -28,7 +28,8 @@ JIRA_PLUGIN = FIXTURES / "jira-plugin"
 BRANCH = "develop"
 SEED_TAG = "eval-seed"
 GH_CALLS = "gh-calls.jsonl"  # the fake gh in fixtures/bin appends here
-IDENTITY = ("-c", "user.name=Eval", "-c", "user.email=eval@example.com")
+EVAL_NAME, EVAL_EMAIL = "Eval", "eval@example.com"  # the git identity of every commit in the sandbox
+IDENTITY = ("-c", f"user.name={EVAL_NAME}", "-c", f"user.email={EVAL_EMAIL}")
 
 # file id: (title, status, priority, every criterion ticked)
 ITEMS = {

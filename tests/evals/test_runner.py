@@ -166,3 +166,90 @@ def test_a_case_defaults_to_no_closed_loop_contract():
     from evals.cases import CASES, Case
 
     assert Case("x", None, "p", lambda s: []).closed_loop is False
+
+
+def home_env(tmp_path, **base):
+    return clean_env(base, tmp_path, board=False, logbook=False)
+
+
+def test_clean_env_drops_gits_config_overrides_but_keeps_other_git_variables(tmp_path):
+    overrides = ["GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_COUNT",
+                 "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_CONFIG_KEY_1", "GIT_CONFIG_VALUE_1"]
+    env = home_env(tmp_path, GIT_EDITOR="true", **{name: "x" for name in overrides})
+    assert not [name for name in overrides if name in env]
+    assert env["GIT_EDITOR"] == "true"
+
+
+def test_clean_env_gives_the_run_its_own_home(tmp_path):
+    env = home_env(tmp_path, HOME="/the/real/home", USERPROFILE="C:/the/real/home")
+    assert env["HOME"] == str(tmp_path / "home")
+    assert env["USERPROFILE"] == str(tmp_path / "home")
+
+
+@pytest.mark.parametrize("base", [{}, {"XDG_CONFIG_HOME": "/the/real/config"}])
+def test_clean_env_points_xdg_config_home_into_the_new_home(tmp_path, base):
+    assert home_env(tmp_path, **base)["XDG_CONFIG_HOME"] == str(tmp_path / "home" / ".config")
+
+
+def test_clean_env_names_the_real_claude_config_dir_from_the_base(tmp_path):
+    real = tmp_path / "real-claude"
+    assert home_env(tmp_path, CLAUDE_CONFIG_DIR=str(real))["CLAUDE_CONFIG_DIR"] == str(real)
+
+
+def test_clean_env_names_the_default_claude_config_dir_when_the_base_sets_none(tmp_path):
+    env = home_env(tmp_path, HOME="/the/real/home")
+    assert env["CLAUDE_CONFIG_DIR"] == str(config_dir({}))
+    assert Path(env["CLAUDE_CONFIG_DIR"]).is_absolute()
+
+
+def test_clean_env_keeps_the_uv_python_install_dir_of_the_base(tmp_path):
+    env = home_env(tmp_path, UV_PYTHON_INSTALL_DIR="/the/real/pythons")
+    assert env["UV_PYTHON_INSTALL_DIR"] == "/the/real/pythons"
+
+
+def test_clean_env_asks_uv_for_its_python_dir_when_the_base_sets_none(tmp_path, monkeypatch):
+    monkeypatch.delenv("UV_PYTHON_INSTALL_DIR", raising=False)
+    asked = subprocess.run(["uv", "python", "dir"], capture_output=True, text=True, check=True).stdout.strip()
+    assert home_env(tmp_path)["UV_PYTHON_INSTALL_DIR"] == asked
+
+
+def test_make_home_creates_a_home_with_a_git_identity(tmp_path):
+    from evals.runner import make_home
+    home = make_home(tmp_path)
+    assert home == tmp_path / "home"
+    env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
+    for var in ("GIT_CONFIG_GLOBAL", "XDG_CONFIG_HOME"):
+        env.pop(var, None)
+    out = {key: subprocess.run(["git", "config", "--global", key], env=env, capture_output=True,
+                               text=True, check=True).stdout.strip() for key in ("user.name", "user.email")}
+    assert out == {"user.name": "Eval", "user.email": "eval@example.com"}
+
+
+def test_uv_python_dir_names_the_command_when_uv_cannot_start(monkeypatch):
+    from evals import runner
+
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("no uv")
+
+    runner.uv_python_dir.cache_clear()
+    monkeypatch.setattr(runner.subprocess, "run", missing)
+    try:
+        with pytest.raises(RuntimeError, match=r"`uv python dir` failed: .*no uv"):
+            runner.uv_python_dir()
+    finally:
+        runner.uv_python_dir.cache_clear()
+
+
+def test_uv_python_dir_names_the_command_and_stderr_on_a_non_zero_exit(monkeypatch):
+    from evals import runner
+
+    def failing(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="boom\n")
+
+    runner.uv_python_dir.cache_clear()
+    monkeypatch.setattr(runner.subprocess, "run", failing)
+    try:
+        with pytest.raises(RuntimeError, match=r"`uv python dir` failed: boom$"):
+            runner.uv_python_dir()
+    finally:
+        runner.uv_python_dir.cache_clear()

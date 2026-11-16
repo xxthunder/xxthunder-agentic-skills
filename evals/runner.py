@@ -2,12 +2,16 @@
 
 A run sees only its sandbox: user settings are not loaded, MCP servers are
 not started, every store variable pair is cleared from the environment and
-only the pairs the case asks for point into the sandbox.
+only the pairs the case asks for point into the sandbox. Its HOME is a fresh
+directory in the sandbox with a git identity of its own; the Claude config
+directory and the uv Python directory keep pointing at the real ones.
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -17,7 +21,7 @@ import tempfile
 from pathlib import Path
 
 from evals.cases import Case
-from evals.fixture import FIXTURES, JIRA_PLUGIN, build, mark_seed, snapshot
+from evals.fixture import EVAL_EMAIL, EVAL_NAME, FIXTURES, JIRA_PLUGIN, build, mark_seed, snapshot
 
 PLUGIN = "plugins/xxthunder-dev-skills"
 STORE_PREFIXES = ("BOARD", "LOGBOOK", "LEARNINGS")
@@ -77,11 +81,47 @@ def dependency_dirs(plugin: Path, config: Path) -> list[Path]:
     return dirs
 
 
+@functools.cache
+def uv_python_dir() -> str:
+    """Where uv keeps its managed Pythons, asked once per process."""
+    cmd = ["uv", "python", "dir"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True)
+    except OSError as e:
+        raise RuntimeError(f"`{' '.join(cmd)}` failed: {e}") from e
+    if r.returncode:
+        raise RuntimeError(f"`{' '.join(cmd)}` failed: {r.stderr.strip()}")
+    return r.stdout.strip()
+
+
+# git's config overrides would bypass the run's own HOME and its .gitconfig
+GIT_CONFIG_OVERRIDE_RE = re.compile(r"GIT_CONFIG_(GLOBAL|SYSTEM|NOSYSTEM|COUNT|KEY_\d+|VALUE_\d+)$")
+
+
+def home_of(sandbox: Path) -> Path:
+    """The run's own HOME under *sandbox*."""
+    return sandbox / "home"
+
+
+def make_home(sandbox: Path) -> Path:
+    """The run's own HOME under *sandbox*, holding a git identity."""
+    home = home_of(sandbox)
+    home.mkdir(parents=True, exist_ok=True)
+    (home / ".gitconfig").write_text(f"[user]\n\tname = {EVAL_NAME}\n\temail = {EVAL_EMAIL}\n", encoding="utf-8")
+    return home
+
+
 def clean_env(base: dict[str, str], sandbox: Path, board: bool, logbook: bool,
               learnings: bool = False) -> dict[str, str]:
     pairs = {k[: -len("_REMOTE")] for k in base if k.endswith("_REMOTE")} | set(STORE_PREFIXES)
     env = {k: v for k, v in base.items()
-           if k not in PARENT_SESSION and not any(k in (f"{p}_PATH", f"{p}_REMOTE") for p in pairs)}
+           if k not in PARENT_SESSION and not GIT_CONFIG_OVERRIDE_RE.match(k)
+           and not any(k in (f"{p}_PATH", f"{p}_REMOTE") for p in pairs)}
+    home = home_of(sandbox)
+    env["HOME"] = env["USERPROFILE"] = str(home)
+    env["XDG_CONFIG_HOME"] = str(home / ".config")
+    env["CLAUDE_CONFIG_DIR"] = str(config_dir(base).absolute())
+    env["UV_PYTHON_INSTALL_DIR"] = base.get("UV_PYTHON_INSTALL_DIR") or uv_python_dir()
     env["XDG_CACHE_HOME"] = str(sandbox / "cache")
     env["EVAL_SANDBOX"] = str(sandbox)  # where the fake gh records its calls
     env["PATH"] = os.pathsep.join([str(FIXTURES / "bin"), *filter(None, [env.get("PATH")])])
@@ -135,6 +175,7 @@ def run_one(case: Case, plugin_dirs: list[Path], n: int, out: Path, fp: str = ""
     if case.setup:
         case.setup(sandbox / "checkouts" / "demo")
         mark_seed(sandbox)
+    make_home(sandbox)
     env = clean_env(dict(os.environ), sandbox, case.board, case.logbook, case.learnings)
     try:
         r = subprocess.run(claude_command(case.prompt, plugin_dirs, sandbox), cwd=sandbox / "checkouts" / "demo",
