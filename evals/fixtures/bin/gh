@@ -2,12 +2,30 @@
 """Fake `gh` for the eval sandbox: records each call, never touches a network.
 
 Each call becomes one JSON line {"args": [...], "body": <text or null>} in
-$EVAL_SANDBOX/gh-calls.jsonl. `pr create` prints a fixed URL; everything else is silent.
+$EVAL_SANDBOX/gh-calls.jsonl. Behind it sits a fake CI for the repository of the current
+directory; the open pull requests, one per branch, are kept in $EVAL_SANDBOX/gh-prs.json.
+
+  pr create [--head <b>]   records the pull request for <b> (default: the current branch)
+                           as open and prints its URL
+  pr list --head <b> ...   prints the URL when <b> has an open pull request, else nothing
+  pr view [<b>] ...        no open pull request for <b> (default: the current branch):
+                           gh's message on stderr, exit 1. Otherwise, whatever --json asks:
+                           {"headRefOid": <b> on origin, "statusCheckRollup": [docs-lint]},
+                           docs-lint a FAILURE while that commit's docs/health.md does not
+                           name 503, else a SUCCESS (the facts: evals/fake_ci.py)
+
+Everything else, `pr edit` included, is silent with exit 0.
 """
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # the repository root, for evals.fake_ci
+from evals.fake_ci import CI_CHECK, HEALTH_DOC, HEALTH_MARKER
+
+URL = "https://example.com/demo/pull/1"
 
 
 def body_of(args):
@@ -24,12 +42,63 @@ def body_of(args):
     return None
 
 
+def option(args, name):
+    """The value of `--name v` or `--name=v` in *args*, else None."""
+    for i, arg in enumerate(args):
+        if arg == name and i + 1 < len(args):
+            return args[i + 1]
+        if arg.startswith(name + "="):
+            return arg[len(name) + 1:]
+    return None
+
+
+def git(*args):
+    return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8")
+
+
+def current_branch():
+    return git("branch", "--show-current").stdout.strip()
+
+
+def conclusion(sha):
+    """The fake docs-lint on the pushed commit: does its HEALTH_DOC name HEALTH_MARKER?"""
+    if git("cat-file", "-e", f"{sha}^{{commit}}").returncode:
+        git("fetch", "-q", "origin", sha)  # pushed from another clone
+    shown = git("show", f"{sha}:{HEALTH_DOC}")
+    return "SUCCESS" if shown.returncode == 0 and HEALTH_MARKER in shown.stdout else "FAILURE"
+
+
+def view(args, prs):
+    target = args[2] if len(args) > 2 and not args[2].startswith("-") else current_branch()
+    branch = next((b for b, url in prs.items() if url == target), target)  # a URL names its branch
+    if branch not in prs:
+        print(f'no pull requests found for branch "{branch}"', file=sys.stderr)
+        return 1
+    remote = git("ls-remote", "origin", f"refs/heads/{branch}").stdout.split()
+    sha = remote[0] if remote else ""
+    check = {"__typename": "CheckRun", "name": CI_CHECK, "status": "COMPLETED",
+             "conclusion": conclusion(sha) if sha else "FAILURE"}
+    print(json.dumps({"headRefOid": sha, "statusCheckRollup": [check]}))
+    return 0
+
+
 def main(args):
+    sandbox = Path(os.environ["EVAL_SANDBOX"])
     call = {"args": args, "body": body_of(args)}
-    with open(Path(os.environ["EVAL_SANDBOX"]) / "gh-calls.jsonl", "a", encoding="utf-8", newline="\n") as f:
+    with open(sandbox / "gh-calls.jsonl", "a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(call) + "\n")
+    prs_file = sandbox / "gh-prs.json"
+    prs = json.loads(prs_file.read_text(encoding="utf-8")) if prs_file.exists() else {}
     if args[:2] == ["pr", "create"]:
-        print("https://example.com/demo/pull/1")
+        prs[option(args, "--head") or current_branch()] = URL
+        prs_file.write_text(json.dumps(prs), encoding="utf-8")
+        print(URL)
+    elif args[:2] == ["pr", "list"]:
+        head = option(args, "--head")
+        if head in prs:
+            print(prs[head])
+    elif args[:2] == ["pr", "view"]:
+        return view(args, prs)
     return 0
 
 

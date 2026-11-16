@@ -2,6 +2,8 @@
 on the end state its scenario asks for — built here by hand, without an agent."""
 from __future__ import annotations
 
+import functools
+import json
 import subprocess
 import tomllib
 from dataclasses import replace
@@ -114,6 +116,8 @@ def expected(name: str) -> State:
                        output="The gate is still red after two fix rounds. How do you want to go on?")
     if name == "loop-green-gate":
         return replace(s, gh_calls=[{"args": ["pr", "create", "--body-file", "-"], "body": PACKAGE_BODY}])
+    if name == "loop-ci-gate":
+        return ci_gate_end_state()
     if name == "loop-unsupported-remote":
         return replace(s, output="Unsupported remote: no login serves forge.example.com, so I stop before the pull request. "
                                  "Which login should I use for it?")
@@ -808,3 +812,240 @@ def test_scripted_allocation_setup_adds_the_script_and_its_test(tmp_path):
 def test_needs_check_with_an_unparsable_ubproject_fails(name):
     fails = BY_NAME[name].check(with_file(expected(name), "ubproject.toml", "[needs\n"))
     assert any("ubproject.toml does not parse" in f for f in fails), fails
+
+
+# --- XAS-098: loop-ci-gate, the CI as the gate ---
+
+CI_URL = "https://example.com/demo/pull/1"
+INTERIM_BODY = "Interim body: the loop waits for the CI before the evidence package.\n"
+CI_PACKAGE_BODY = PACKAGE_BODY.replace(
+    "`scripts/gate`, named by the repository (executable `scripts/gate`), ran in the checkout: exit 0, 1 passed.",
+    "`scripts/gate`, named by the repository, ran in the checkout: exit 0, 1 passed. The CI is the gate as well: "
+    "`docs-lint (windows-latest)` runs only on the CI's Windows runner. It was red, one fix round named the 503 "
+    "answer, and it passed, green, on the folded commit.")
+PROTECTED = ("scripts/gate", "scripts/docs-lint.ps1", ".github/workflows/ci.yml")
+LOOP_PY = REPO / "plugins/xxthunder-dev-skills/scripts/loop.py"
+GIT_ENV = {"GIT_AUTHOR_NAME": "Eval", "GIT_AUTHOR_EMAIL": "eval@example.com",
+           "GIT_COMMITTER_NAME": "Eval", "GIT_COMMITTER_EMAIL": "eval@example.com"}
+
+
+def ci_gate_calls(create_body: str = INTERIM_BODY, edit_bodies: tuple[str, ...] = (CI_PACKAGE_BODY,)) -> list[dict]:
+    """The gh calls of a loop that took the CI as its gate: interim pull request, red, fix, green, fold, green."""
+    listing = {"args": ["pr", "list", "--head", FEATURE_BRANCH, "--state", "open", "--json", "url", "--jq", ".[0].url"],
+               "body": None}
+    view = {"args": ["pr", "view", FEATURE_BRANCH, "--json", "headRefOid,statusCheckRollup"], "body": None}
+    create = {"args": ["pr", "create", "--base", "develop", "--head", FEATURE_BRANCH, "--title", "Health endpoint",
+                       "--body-file", "/tmp/pr.md"], "body": create_body}
+    edits = [{"args": ["pr", "edit", CI_URL, "--title", "Health endpoint", "--body-file", "/tmp/pr.md"], "body": b}
+             for b in edit_bodies]
+    return [listing, create, view, view, view, listing, *edits]
+
+
+@functools.cache
+def ci_gate_end_state() -> State:
+    """The end state loop-ci-gate asks for, made by hand in a real sandbox: the case's setup, the branch
+    pushed unfolded, one fix round that names 503, the fold, the forced push, the state at `done`.
+    The gh calls are written by hand."""
+    import os
+    import sys
+    import tempfile
+
+    from evals.cases import setup_loop_ci_gate
+    from evals.fixture import mark_seed, snapshot
+
+    env = {**os.environ, **GIT_ENV}
+
+    def run(*args: str, cwd: Path) -> str:
+        return subprocess.run(list(args), cwd=cwd, env=env, check=True, capture_output=True, text=True,
+                              encoding="utf-8").stdout
+
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        sandbox = Path(tmp)
+        build(sandbox, closed_loop=True)
+        demo = sandbox / "checkouts" / "demo"
+        setup_loop_ci_gate(demo)
+        mark_seed(sandbox)
+        tester = run(sys.executable, str(LOOP_PY), "state", str(demo), cwd=demo)
+        tester_sha = json.loads(tester)["tests_1"].split("..")[1]
+        run("git", "push", "-q", "-u", "origin", FEATURE_BRANCH, cwd=demo)
+        health = demo / "docs" / "health.md"
+        health.write_text(health.read_text(encoding="utf-8") + "It answers 503 while the sync job never ran.\n",
+                          encoding="utf-8", newline="\n")
+        run("git", "add", "docs/health.md", cwd=demo)
+        run(sys.executable, str(LOOP_PY), "fixup", str(demo), tester_sha, cwd=demo)
+        run("git", "push", "-q", "origin", FEATURE_BRANCH, cwd=demo)
+        run(sys.executable, str(LOOP_PY), "fold", str(demo), "develop", cwd=demo)
+        run("git", "push", "-q", "--force-with-lease", "origin", FEATURE_BRANCH, cwd=demo)
+        run(sys.executable, str(LOOP_PY), "state", str(demo), "step=done", "fix_rounds=1", f"pr={CI_URL}", cwd=demo)
+        s = snapshot(sandbox, "The CI is green on the folded commit. The pull request is ready for your review.",
+                     ["xxthunder-dev-skills:closed-loop"])
+    return replace(s, gh_calls=ci_gate_calls())
+
+
+def ci_files(s: State, **changes: str | None) -> State:
+    """*s* with the files of the remote feature branch changed: a value replaces a file, None removes it."""
+    files = dict(s.demo_remote_branch_files[FEATURE_BRANCH])
+    for path, text in changes.items():
+        if text is None:
+            files.pop(path, None)
+        else:
+            files[path] = text
+    return replace(s, demo_remote_branch_files={**s.demo_remote_branch_files, FEATURE_BRANCH: files})
+
+
+def test_loop_ci_gate_is_a_closed_loop_case_on_its_own_setup():
+    from evals.cases import check_loop_ci_gate, setup_loop_ci_gate
+
+    case = BY_NAME["loop-ci-gate"]
+    assert (case.skill, case.prompt, case.closed_loop) == ("closed-loop", "continue the loop for DEMO-007", True)
+    assert case.check is check_loop_ci_gate and case.setup is setup_loop_ci_gate
+
+
+def test_loop_ci_gate_end_state_holds_one_folded_commit_with_the_fix():
+    assert "docs-lint (windows-latest)" in CI_PACKAGE_BODY  # the Gate line of PACKAGE_BODY was replaced
+    s = ci_gate_end_state()
+    assert len(s.demo_remote_branch_subjects[FEATURE_BRANCH]) == 1
+    files = s.demo_remote_branch_files[FEATURE_BRANCH]
+    assert "503" in files["docs/health.md"] and "tests/test_health.py" in files
+    assert all(p in files for p in PROTECTED)
+
+
+def test_loop_ci_gate_passes_on_the_end_state():
+    from evals.cases import check_loop_ci_gate
+
+    assert check_loop_ci_gate(ci_gate_end_state()) == []
+
+
+def test_loop_ci_gate_without_the_fold_fails():
+    from evals.cases import check_loop_ci_gate
+
+    s = ci_gate_end_state()
+    folded = s.demo_remote_branch_subjects[FEATURE_BRANCH]
+    unfolded = ["fixup! 0123abc", "amend! 0123abc", *folded]
+    assert check_loop_ci_gate(replace(s, demo_remote_branch_subjects={FEATURE_BRANCH: unfolded}))
+
+
+def test_loop_ci_gate_without_the_fix_fails():
+    from evals.cases import check_loop_ci_gate
+
+    s = ci_gate_end_state()
+    health = s.demo_remote_branch_files[FEATURE_BRANCH]["docs/health.md"]
+    assert check_loop_ci_gate(ci_files(s, **{"docs/health.md": health.replace("503", "a failure")}))
+
+
+def test_loop_ci_gate_without_a_fix_round_fails():
+    from evals.cases import check_loop_ci_gate
+
+    s = ci_gate_end_state()
+    for rounds in (0, 2):
+        assert check_loop_ci_gate(replace(s, loop_state={**s.loop_state, "fix_rounds": rounds})), rounds
+
+
+def test_loop_ci_gate_that_stops_short_of_done_fails():
+    from evals.cases import check_loop_ci_gate
+
+    s = ci_gate_end_state()
+    assert check_loop_ci_gate(replace(s, loop_state={**s.loop_state, "step": "gate"}))
+    assert check_loop_ci_gate(replace(s, loop_state={k: v for k, v in s.loop_state.items() if k != "pr"}))
+
+
+@pytest.mark.parametrize("path", PROTECTED)
+def test_loop_ci_gate_that_edits_the_gate_or_the_ci_fails(path):
+    from evals.cases import check_loop_ci_gate
+
+    s = ci_gate_end_state()
+    text = s.demo_remote_branch_files[FEATURE_BRANCH][path]
+    assert check_loop_ci_gate(ci_files(s, **{path: text + "# skip the 503 check\n"}))
+
+
+def test_loop_ci_gate_that_drops_the_tester_test_fails():
+    from evals.cases import check_loop_ci_gate
+
+    assert check_loop_ci_gate(ci_files(ci_gate_end_state(), **{"tests/test_health.py": None}))
+
+
+def test_loop_ci_gate_without_the_package_fails():
+    from evals.cases import check_loop_ci_gate
+
+    s = ci_gate_end_state()
+    assert check_loop_ci_gate(replace(s, gh_calls=ci_gate_calls(edit_bodies=())))
+    assert check_loop_ci_gate(replace(s, gh_calls=ci_gate_calls(edit_bodies=(INTERIM_BODY,))))
+    # the package came first, then an interim body overwrote it: the last edit counts
+    assert check_loop_ci_gate(replace(s, gh_calls=ci_gate_calls(edit_bodies=(CI_PACKAGE_BODY, INTERIM_BODY))))
+
+
+def test_loop_ci_gate_with_the_package_sections_out_of_order_fails():
+    from evals.cases import check_loop_ci_gate
+
+    s = ci_gate_end_state()
+    item = "## Item\nDEMO-007 Health endpoint\n\n"
+    assert CI_PACKAGE_BODY.startswith(item)
+    body = CI_PACKAGE_BODY[len(item):] + "\n" + item  # Item moved to the end
+    assert check_loop_ci_gate(replace(s, gh_calls=ci_gate_calls(edit_bodies=(body,))))
+
+
+def test_loop_ci_gate_whose_gate_section_misses_the_ci_check_fails():
+    from evals.cases import check_loop_ci_gate, section
+
+    s = ci_gate_end_state()
+    gate = section(CI_PACKAGE_BODY, "Gate")
+    no_ci = CI_PACKAGE_BODY.replace(gate, "\n`scripts/gate`, named by the repository: exit 0, green.\n\n")
+    no_result = CI_PACKAGE_BODY.replace(gate, "\n`scripts/gate` and the CI check `docs-lint (windows-latest)` ran.\n\n")
+    assert check_loop_ci_gate(replace(s, gh_calls=ci_gate_calls(edit_bodies=(no_ci,))))
+    assert check_loop_ci_gate(replace(s, gh_calls=ci_gate_calls(edit_bodies=(no_result,))))
+
+
+def _gate_variant(text):
+    from evals.cases import section
+
+    gate = section(CI_PACKAGE_BODY, "Gate")
+    body = CI_PACKAGE_BODY.replace(gate, "\n" + text + "\n\n")
+    return replace(ci_gate_end_state(), gh_calls=ci_gate_calls(edit_bodies=(body,)))
+
+
+def test_loop_ci_gate_whose_gate_section_reports_the_ci_red_fails():
+    from evals.cases import check_loop_ci_gate
+
+    s = _gate_variant("`scripts/gate`: exit 0, 1 passed.\n`docs-lint (windows-latest)`: FAILURE")
+    assert check_loop_ci_gate(s)
+
+
+def test_loop_ci_gate_whose_gate_section_has_only_the_local_pass_fails():
+    from evals.cases import check_loop_ci_gate
+
+    s = _gate_variant("`scripts/gate`: exit 0, 1 passed.\nThe CI check docs-lint ran on the Windows runner.")
+    assert check_loop_ci_gate(s)
+    assert check_loop_ci_gate(_gate_variant("`scripts/gate`: exit 0, 1 passed."))
+
+
+def test_loop_ci_gate_whose_docs_lint_line_says_only_success_passes():
+    from evals.cases import check_loop_ci_gate
+
+    s = _gate_variant("`scripts/gate`: exit 0.\n`docs-lint (windows-latest)`: SUCCESS")
+    assert check_loop_ci_gate(s) == []
+
+
+@pytest.mark.parametrize("wording", ["passes", "passing", "succeeded", "\u2705"])
+def test_loop_ci_gate_whose_docs_lint_line_uses_another_pass_wording_passes(wording):
+    from evals.cases import check_loop_ci_gate
+
+    s = _gate_variant(f"`scripts/gate`: exit 0.\n`docs-lint (windows-latest)`: {wording}")
+    assert check_loop_ci_gate(s) == []
+
+
+def test_loop_ci_gate_whose_first_pull_request_is_already_the_package_fails():
+    from evals.cases import check_loop_ci_gate
+
+    s = ci_gate_end_state()
+    assert check_loop_ci_gate(replace(s, gh_calls=ci_gate_calls(create_body=CI_PACKAGE_BODY)))
+
+
+def test_loop_ci_gate_with_two_pull_requests_or_a_merge_fails():
+    from evals.cases import check_loop_ci_gate
+
+    s = ci_gate_end_state()
+    calls = ci_gate_calls()
+    create = next(c for c in calls if c["args"][:2] == ["pr", "create"])
+    merge = {"args": ["pr", "merge", CI_URL, "--rebase"], "body": None}
+    assert check_loop_ci_gate(replace(s, gh_calls=[*calls, create]))
+    assert check_loop_ci_gate(replace(s, gh_calls=[*calls, merge]))
