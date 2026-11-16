@@ -65,7 +65,10 @@ if key == "pr view":
     # the n-th `pr view` call, counted from the lines already in the log
     with open(os.environ["FAKE_LOG"], encoding="utf-8") as f:
         n = sum(1 for line in f if json.loads(line)[:2] == ["pr", "view"]) - 1
-    print(json.dumps({"statusCheckRollup": rollups[min(n, len(rollups) - 1)]}))
+    answer = {"statusCheckRollup": rollups[min(n, len(rollups) - 1)]}
+    if "heads" in cfg:
+        answer = {"headRefOid": cfg["heads"][min(n, len(cfg["heads"]) - 1)], **answer}
+    print(json.dumps(answer))
     sys.exit(0)
 sys.exit(0)
 '''
@@ -89,7 +92,8 @@ def write_gh(tmp_path: Path, **config) -> Path:
 
     config keys: token {host: token}, pr_list, create_url,
     rollups [[entry, ...], ...] (the statusCheckRollup that the n-th `pr view` call answers; the
-    last list repeats), view_sleep (seconds `pr view` sleeps before answering), view_raw (a string `pr view` prints verbatim instead),
+    last list repeats), heads [sha, ...] (the headRefOid that the n-th `pr view` call answers next
+    to its rollup; the last repeats; without `heads` the answer has no headRefOid), view_sleep (seconds `pr view` sleeps before answering), view_raw (a string `pr view` prints verbatim instead),
     fail {"pr create": {"exit": 1, "stderr": "..."}} (also "pr view").
     """
     (tmp_path / "fake-gh.json").write_text(json.dumps(config), encoding="utf-8")
