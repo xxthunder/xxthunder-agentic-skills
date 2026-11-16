@@ -9,7 +9,6 @@
 ## Table of Contents
 
 ### Open
-- [XAS-098 — An eval case covers the closed loop's CI as the gate, and each eval run has its own HOME](xas-098.md)
 - [XAS-096 — The evidence package's steps name the pull request without its number](xas-096.md)
 - [XAS-095 — The closed loop opens the pull request where the host's CLI login is, also for a repository with a dev container](xas-095.md)
 - [XAS-093 — A board card links an item in a personal Bitbucket Server repository](xas-093.md)
@@ -64,6 +63,7 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
+- [XAS-098 — An eval case covers the closed loop's CI as the gate, and each eval run has its own HOME](xas-098.md)
 - [XAS-087 — The closed loop talks to its host through one script, with backends for GitHub, Gitea and Bitbucket Server](xas-087.md)
 - [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
 - [XAS-044a — ADR: requirements become a binding design artifact where sphinx-needs is in use](xas-044a.md)
