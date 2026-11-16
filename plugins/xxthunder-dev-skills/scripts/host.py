@@ -16,13 +16,14 @@ Subcommands (output is JSON on stdout, errors go to stderr):
          [--timeout <seconds, default 7200>]
       Waits until the checks on <head> are done:
       {"backend", "state": "green"|"red", "checks": [{"name", "state"}]}.
-      GitHub: polls `gh pr view <head> --json statusCheckRollup` every --interval
-      seconds until at least one check is reported and every one is final. Green only
+      GitHub: polls `gh pr view <head> --json headRefOid,statusCheckRollup` every
+      --interval seconds, and counts the rollup only when headRefOid is <head> as the
+      worktree has it (the pushed commit); <head> not a branch in the worktree is exit 3.
+      It waits until at least one check is reported and every one is final. Green only
       when all passed (SUCCESS, NEUTRAL, SKIPPED; a status SUCCESS); checks lists each
       as {"name", "state"}. No verdict within
-      --timeout (no check reported, or one still running) is exit 3. It reads the
-      pull request's current head, so right after a push it may still read the previous
-      commit, until XAS-090.
+      --timeout (the head not yet the pushed commit, no check reported, or one still
+      running) is exit 3.
 
 The remote is the raw `remote.origin.url` of <worktree>. The backend is the first that
 serves its host, in this order:
@@ -186,17 +187,24 @@ class GitHub:
 
     def checks(self, worktree: str, head: str, interval: float,
                timeout: float) -> tuple[bool, list[dict]]:
+        sha = head_sha(worktree, head)
         deadline = time.monotonic() + timeout
 
         def poll():
             # No single call runs past the deadline: a hung gh is exit 3, not a hang.
             left = max(deadline - time.monotonic(), 0.001)
-            out = self.call(worktree, "pr", "view", head, "--json", "statusCheckRollup",
-                            timeout=left)
+            out = self.call(worktree, "pr", "view", head, "--json",
+                            "headRefOid,statusCheckRollup", timeout=left)
             try:
-                rollup = json.loads(out.stdout).get("statusCheckRollup")
+                answer = json.loads(out.stdout)
+                oid, rollup = answer.get("headRefOid"), answer.get("statusCheckRollup")
             except (ValueError, AttributeError):
                 raise HostError(f"gh pr view {head} did not print a JSON object") from None
+            if not isinstance(oid, str):
+                raise HostError(f"gh pr view {head} answer without a headRefOid string")
+            # The pull request still shows an older commit: its checks are not ours.
+            if oid != sha:
+                return None
             if not isinstance(rollup, list):
                 raise HostError(f"gh pr view {head} answer without a statusCheckRollup list")
             entries = []

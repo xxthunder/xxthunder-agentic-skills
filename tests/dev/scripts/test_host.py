@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from host_fakes import (HOST, FakeBitbucket, FakeGitea, env, log, repo, run,
+from host_fakes import (HOST, FakeBitbucket, FakeGitea, commit_on_feat, env, log, repo, run,
                         write_bitbucket_profile, write_gh, write_tea, write_tea_config)
 
 GH_URL = "https://github.com/o/r.git"
@@ -102,11 +102,21 @@ def views(tmp_path):
     return [c for c in log(tmp_path) if c[:2] == ["pr", "view"]]
 
 
+OLD = "0" * 40  # a SHA that is not the local commit of `feat`
+
+
 def checks(tmp_path, *extra, **gh_config):
-    """Run `host.py checks` on GitHub against a fake `gh` configured by gh_config."""
-    bin_dir = write_gh(tmp_path, token={"github.com": "t"}, **gh_config)
-    return run("checks", repo(tmp_path, GH_URL), "--head", "feat", *extra,
-               env=env(tmp_path, bin_dir))
+    """Run `host.py checks` on GitHub against a fake `gh` configured by gh_config.
+
+    The worktree holds a commit on `feat`. `heads` defaults to that commit; in a
+    `heads` list given by the test, None stands for that commit.
+    """
+    work = repo(tmp_path, GH_URL)
+    sha = commit_on_feat(work)
+    heads = gh_config.pop("heads", [sha])
+    heads = [sha if h is None else h for h in heads]
+    bin_dir = write_gh(tmp_path, token={"github.com": "t"}, heads=heads, **gh_config)
+    return run("checks", work, "--head", "feat", *extra, env=env(tmp_path, bin_dir))
 
 
 def test_github_checks_green_lists_checks(tmp_path):
@@ -118,7 +128,7 @@ def test_github_checks_green_lists_checks(tmp_path):
                    {"name": "ci/lint", "state": "SUCCESS"}],
     }
     calls = log(tmp_path)
-    assert ["pr", "view", "feat", "--json", "statusCheckRollup"] in calls
+    assert ["pr", "view", "feat", "--json", "headRefOid,statusCheckRollup"] in calls
     assert not [c for c in calls if c[:2] == ["pr", "checks"]]
 
 
@@ -161,6 +171,43 @@ def test_github_checks_never_reported_times_out(tmp_path):
     assert "timed out" in r.stderr
     assert r.stdout == ""
     assert len(views(tmp_path)) >= 2
+
+
+def test_github_checks_stale_green_never_decides(tmp_path):
+    # first answer: the previous commit, green; second: the pushed commit, red
+    r = checks(tmp_path, "--interval", "0", heads=[OLD, None],
+               rollups=[[run_("build", "SUCCESS")], [run_("build", "FAILURE")]])
+    assert r.returncode == 1, r.stderr
+    assert json.loads(r.stdout)["state"] == "red"
+    assert len(views(tmp_path)) == 2
+
+
+def test_github_checks_stale_red_never_decides(tmp_path):
+    # first answer: the previous commit, red; second: the pushed commit, green
+    r = checks(tmp_path, "--interval", "0", heads=[OLD, None],
+               rollups=[[run_("build", "FAILURE")], [run_("build", "SUCCESS")]])
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["state"] == "green"
+    assert len(views(tmp_path)) == 2
+
+
+def test_github_checks_head_never_reaches_pushed_commit_times_out(tmp_path):
+    r = checks(tmp_path, "--interval", "0.05", "--timeout", "1", heads=[OLD],
+               rollups=[[run_("build", "SUCCESS")]])
+    assert r.returncode == 3
+    assert "timed out" in r.stderr
+    assert r.stdout == ""
+    assert len(views(tmp_path)) >= 2
+
+
+def test_github_checks_head_not_a_branch_is_exit_3(tmp_path):
+    bin_dir = write_gh(tmp_path, token={"github.com": "t"}, heads=[OLD],
+                       rollups=[[run_("build", "SUCCESS")]])
+    work = repo(tmp_path, GH_URL)  # no commit, no branch `feat`
+    r = run("checks", work, "--head", "feat", env=env(tmp_path, bin_dir))
+    assert r.returncode == 3
+    assert "feat" in r.stderr
+    assert not views(tmp_path)
 
 
 def test_github_checks_skipped_and_neutral_pass(tmp_path):
@@ -272,16 +319,36 @@ def test_github_checks_gh_error_on_served_host_is_exit_3(tmp_path):
 def test_github_checks_hostless_gh_error_is_unsupported(tmp_path):
     bin_dir = write_gh(tmp_path, fail=NO_PR)
     work = repo(tmp_path, str(bare_repo(tmp_path)))
+    commit_on_feat(work)
     r = run("checks", work, "--head", "feat", env=env(tmp_path, bin_dir))
     assert r.returncode == 2
     assert r.stderr.startswith("unsupported remote")
 
 
-@pytest.mark.parametrize("view_raw", ["{}", "not json", '{"statusCheckRollup": ["x"]}'])
-def test_github_checks_answer_without_rollup_is_exit_3(tmp_path, view_raw):
-    r = checks(tmp_path, view_raw=view_raw)
+@pytest.mark.parametrize("view_raw", [
+    "{}", "not json", '{"statusCheckRollup": ["x"]}',
+    '{"statusCheckRollup": []}', '{"headRefOid": 7, "statusCheckRollup": []}',
+])
+def test_github_checks_answer_without_head_or_rollup_is_exit_3(tmp_path, view_raw):
+    # a malformed answer fails at once; it is not waited out (the short timeout only
+    # bounds a backend that would wait, and then "timed out" shows it did)
+    r = checks(tmp_path, "--interval", "0.05", "--timeout", "2", view_raw=view_raw)
     assert r.returncode == 3
     assert r.stderr != ""
+    assert "timed out" not in r.stderr
+    assert "Traceback" not in r.stderr
+
+
+@pytest.mark.parametrize("rollups, message", [
+    ([None], "statusCheckRollup list"),
+    ([["x"]], "not an object"),
+])
+def test_github_checks_malformed_rollup_for_our_head_is_exit_3(tmp_path, rollups, message):
+    # the head matches the local commit, so the rollup itself is read and rejected
+    r = checks(tmp_path, "--interval", "0.05", "--timeout", "2", rollups=rollups)
+    assert r.returncode == 3
+    assert message in r.stderr
+    assert "timed out" not in r.stderr
     assert "Traceback" not in r.stderr
 
 
@@ -309,9 +376,11 @@ def test_token_never_printed(tmp_path):
     # checks, red path
     d2 = tmp_path / "red"
     d2.mkdir()
-    bin_dir = write_gh(d2, token={"github.com": secret},
+    work2 = repo(d2, GH_URL)
+    sha = commit_on_feat(work2)
+    bin_dir = write_gh(d2, token={"github.com": secret}, heads=[sha],
                        rollups=[[run_("build", "FAILURE")]])
-    outputs.append(run("checks", repo(d2, GH_URL), "--head", "feat",
+    outputs.append(run("checks", work2, "--head", "feat",
                        env=env(d2, bin_dir)))
 
     # gh failure path
