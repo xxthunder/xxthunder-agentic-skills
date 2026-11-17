@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-099 — An eval run on Windows reads no login from the real APPDATA](xas-099.md)
 - [XAS-096 — The evidence package's steps name the pull request without its number](xas-096.md)
 - [XAS-095 — The closed loop opens the pull request where the host's CLI login is, also for a repository with a dev container](xas-095.md)
 - [XAS-093 — A board card links an item in a personal Bitbucket Server repository](xas-093.md)
