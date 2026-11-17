@@ -22,7 +22,6 @@
 - [XAS-083 — The closed loop spends its token budget on reviews, not on rebuilt context](xas-083.md)
 - [XAS-082 — backlog.py and board.py write no em-dash](xas-082.md)
 - [XAS-081 — The evidence package summarises the change and the gate as the contract says](xas-081.md)
-- [XAS-080 — The closed loop runs its scripts where the repository's commands run](xas-080.md)
 - [XAS-078 — board.py polish from the XAS-060 reviews](xas-078.md)
 - [XAS-077 — The ADR log can record that a decision amends part of an earlier one](xas-077.md)
 - [XAS-076 — The skills' remaining registry lookups go through one script](xas-076.md)
@@ -65,6 +64,7 @@
 
 ### In Progress
 - [XAS-087 — The closed loop talks to its host through one script, with backends for GitHub, Gitea and Bitbucket Server](xas-087.md)
+- [XAS-080 — The closed loop runs its scripts where the repository's commands run](xas-080.md)
 - [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
 - [XAS-044a — ADR: requirements become a binding design artifact where sphinx-needs is in use](xas-044a.md)
 - [XAS-044 — Requirements as a binding design artifact where sphinx-needs is in use](xas-044.md)
