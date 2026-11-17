@@ -15,7 +15,6 @@
 - [XAS-093 — A board card links an item in a personal Bitbucket Server repository](xas-093.md)
 - [XAS-092 — The closed loop takes the demo story DEMO-002 from the board to a green pull request](xas-092.md)
 - [XAS-091 — Subprocess coverage measures only the scripts under test, not the test fakes](xas-091.md)
-- [XAS-089 — The implementer commits its own change of a unit with commit-impl](xas-089.md)
 - [XAS-088 — XAS-044b's deferred review findings](xas-088.md)
 - [XAS-085 — design-record's mechanical ADR steps run through a script](xas-085.md)
 - [XAS-084 — A backlog has no standing refinement item: a refinement commit names the item it refines](xas-084.md)
@@ -63,6 +62,7 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
+- [XAS-089 — The implementer commits its own change of a unit with commit-impl](xas-089.md)
 - [XAS-087 — The closed loop talks to its host through one script, with backends for GitHub, Gitea and Bitbucket Server](xas-087.md)
 - [XAS-080 — The closed loop runs its scripts where the repository's commands run](xas-080.md)
 - [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
