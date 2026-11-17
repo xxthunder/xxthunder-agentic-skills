@@ -64,7 +64,6 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
-- [XAS-098 — An eval case covers the closed loop's CI as the gate, and each eval run has its own HOME](xas-098.md)
 - [XAS-087 — The closed loop talks to its host through one script, with backends for GitHub, Gitea and Bitbucket Server](xas-087.md)
 - [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
 - [XAS-044a — ADR: requirements become a binding design artifact where sphinx-needs is in use](xas-044a.md)
@@ -76,6 +75,7 @@
 - [XAS-001 — Backlog refinement](xas-001.md)
 
 ### Done
+- [XAS-098 — An eval case covers the closed loop's CI as the gate, and each eval run has its own HOME](xas-098.md)
 - [XAS-097 — The closed loop's GitHub checks read a re-run check by its newest attempt](xas-097.md)
 - [XAS-094 — The closed loop's GitHub checks never read an empty check list as green, and name the checks they read](xas-094.md)
 - [XAS-090 — The closed loop's GitHub checks wait for the pushed commit](xas-090.md)
