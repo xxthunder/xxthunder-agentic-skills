@@ -601,6 +601,28 @@ def setup_loop_at_gate(demo: Path, gate_exit: int) -> None:
     loop_state(demo, "item=DEMO-007", "step=gate", "fix_rounds=0")
 
 
+CONTAINER_GITDIR = "gitdir: /workspaces/demo/.git/worktrees/demo-007\n"
+
+
+def setup_loop_container_worktree(demo: Path) -> None:
+    """`setup_loop_at_gate`, but the branch lives in `.worktrees/demo-007`, made in a dev container: its
+    `.git` file names a container path that does not exist here. The state is written first, while the
+    harness's own `loop.py` call can still read the worktree."""
+    setup_gate(demo, 0)
+    with (demo / ".gitignore").open("a", encoding="utf-8", newline="\n") as f:
+        f.write("/.worktrees/\n")
+    subprocess.run(["git", "add", ".gitignore"], cwd=demo, check=True)
+    subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "chore: ignore the worktrees"], cwd=demo, check=True)
+    subprocess.run(["git", "push", "-q", "origin", "develop"], cwd=demo, check=True)
+    subprocess.run(["git", "worktree", "add", "-q", ".worktrees/demo-007", "-b", FEATURE_BRANCH],
+                   cwd=demo, check=True)
+    wt = demo / ".worktrees" / "demo-007"
+    stage_health_doc(wt)
+    subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "feat: health endpoint (DEMO-007)"], cwd=wt, check=True)
+    loop_state(wt, "item=DEMO-007", f"branch={FEATURE_BRANCH}", "step=gate", "fix_rounds=0")
+    (wt / ".git").write_text(CONTAINER_GITDIR, encoding="utf-8", newline="\n")
+
+
 def setup_loop_dispute(demo: Path) -> None:
     setup_gate(demo)
     loop_state(demo, "item=DEMO-007", "step=dispute", "task=1.b", "exchanges=2", f"dispute={LOOP_DISPUTE}")
@@ -721,6 +743,33 @@ def check_loop_green_gate(s: State) -> list[str]:
             + expect(bool(GATE_NAMED_RE.search(gate)) and not GATE_OTHER_RE.search(gate),
                      "Gate section does not say the repository names its gate (or says derived/correction)")
             + expect(bool(GATE_RESULT_RE.search(gate)), "Gate section has no result"))
+
+
+# A command check stands here beside the end-state checks: a session that points git at the worktree by
+# hand (GIT_DIR, GIT_WORK_TREE, --git-dir, --work-tree) ends in the same state as one that uses the fix,
+# yet the item asks for the loop "without a workaround". Heredoc bodies and quoted text are cut first, so a
+# commit message or PR body that quotes `GIT_DIR=` does not count; `git rev-parse --git-dir` is a read.
+HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n\s*\2\b", re.S)
+QUOTED_RE = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'[^']*'")
+HAND_SET_GIT_RE = re.compile(r"(?:^|[\s;&|(])GIT_(?:DIR|WORK_TREE)=|"
+                             r"\bgit\s+(?:(?:-C|-c)\s+\S+\s+)*--(?:git-dir|work-tree)(?:=|\s)")
+
+
+def hand_set_git(command: str) -> bool:
+    return bool(HAND_SET_GIT_RE.search(QUOTED_RE.sub("", HEREDOC_RE.sub("", command))))
+
+
+def check_loop_container_worktree(s: State) -> list[str]:
+    calls = pr_calls(s)
+    f = expect(len(calls) == 1, f"pr create calls: {len(calls)}") + expect(not pr_calls(s, "merge"), "the loop merged")
+    if len(calls) == 1:
+        f += package_sections(calls[0]["body"] or "")
+    step = s.worktree_states.get("demo-007", {}).get("step")
+    hand_set = [c for c in s.commands if hand_set_git(c)]
+    return (f + expect(not hand_set, f"git was pointed at the worktree by hand: {[c[:120] for c in hand_set]}")
+            + expect(step == "done", f"state in .git/worktrees/demo-007 has step {step!r}, not 'done'")
+            + expect(s.worktree_git_files.get("demo-007") == CONTAINER_GITDIR,
+                     f"the worktree's .git file changed: {s.worktree_git_files.get('demo-007')!r}"))
 
 
 CI_WORKFLOW = ".github/workflows/ci.yml"
@@ -1081,6 +1130,8 @@ CASES = [
          closed_loop=True, setup=lambda demo: setup_loop_at_gate(demo, 1)),
     Case("loop-green-gate", "closed-loop", "continue the loop for DEMO-007", check_loop_green_gate,
          closed_loop=True, setup=lambda demo: setup_loop_at_gate(demo, 0)),
+    Case("loop-container-worktree", "closed-loop", "continue the loop for DEMO-007", check_loop_container_worktree,
+         closed_loop=True, setup=setup_loop_container_worktree),
     Case("loop-ci-gate", "closed-loop", "continue the loop for DEMO-007", check_loop_ci_gate,
          closed_loop=True, setup=setup_loop_ci_gate),
     Case("loop-unsupported-remote", "closed-loop", "continue the loop for DEMO-007", check_loop_unsupported_remote,

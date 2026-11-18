@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from evals.board import BOARD_FILE, card, jira_card
-from evals.cases import ADR_ONE, ADR_ONE_ORIGINAL, ADR_TWO, ADR_TWO_ROW, ADR_TWO_STALE, CASES, NEEDS_UBPROJECT, REFUSING_UBPROJECT, FEATURE_BRANCH, RUBRIC, flagged, gate_script
+from evals.cases import ADR_ONE, ADR_ONE_ORIGINAL, ADR_TWO, ADR_TWO_ROW, ADR_TWO_STALE, CASES, NEEDS_UBPROJECT, REFUSING_UBPROJECT, CONTAINER_GITDIR, FEATURE_BRANCH, RUBRIC, flagged, gate_script
 from evals.fixture import INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, JIRA_ISSUES, State, build, display_id
 
 REPO = Path(__file__).resolve().parents[2]
@@ -116,6 +116,10 @@ def expected(name: str) -> State:
                        output="The gate is still red after two fix rounds. How do you want to go on?")
     if name == "loop-green-gate":
         return replace(s, gh_calls=[{"args": ["pr", "create", "--body-file", "-"], "body": PACKAGE_BODY}])
+    if name == "loop-container-worktree":
+        return replace(s, gh_calls=[{"args": ["pr", "create", "--body-file", "-"], "body": PACKAGE_BODY}],
+                       worktree_states={"demo-007": {"item": "DEMO-007", "step": "done"}},
+                       worktree_git_files={"demo-007": CONTAINER_GITDIR})
     if name == "loop-ci-gate":
         return ci_gate_end_state()
     if name == "loop-unsupported-remote":
@@ -320,6 +324,33 @@ def test_loop_start_ignores_the_harness_pr_view_after_a_push():
     for args in (["pr", "create"], ["pr", "edit", "1"], ["pr", "merge", "1"]):
         s = replace(base, gh_calls=[view, {"args": args, "body": None}])
         assert any("gh was called" in f for f in BY_NAME["loop-start"].check(s)), args
+
+
+def test_container_worktree_fails_on_an_unread_state_or_a_rewritten_git_file():
+    case, ok = BY_NAME["loop-container-worktree"], expected("loop-container-worktree")
+    stuck = replace(ok, worktree_states={"demo-007": {"step": "gate"}})
+    assert any("not 'done'" in f for f in case.check(stuck))
+    assert any(".git file changed" in f for f in case.check(replace(ok, worktree_git_files={"demo-007": "gitdir: x\n"})))
+
+
+HAND_SET = ["GIT_DIR=/x git status", "export GIT_DIR=/x", "cd w && GIT_WORK_TREE=/x git log",
+            "git --git-dir=/x log", "git --work-tree /x status", "git -C /w --git-dir /x status"]
+NOT_HAND_SET = ["uv run loop.py gate .", "git rev-parse --git-dir", "git rev-parse --git-dir | head -1",
+                "git commit -F - <<'EOF'\nfix: the loop no longer needs GIT_DIR=/x or --work-tree\nEOF",
+                "gh pr create --body-file - <<EOF\nNo more `git --git-dir=/x status`.\nEOF",
+                'git commit -m "drop the GIT_DIR=/x workaround"']
+
+
+@pytest.mark.parametrize("cmd", HAND_SET)
+def test_container_worktree_fails_when_git_is_pointed_at_the_worktree_by_hand(cmd):
+    case = BY_NAME["loop-container-worktree"]
+    assert any("by hand" in f for f in case.check(replace(expected("loop-container-worktree"), commands=[cmd])))
+
+
+@pytest.mark.parametrize("cmd", NOT_HAND_SET)
+def test_container_worktree_ignores_reads_and_quoted_text(cmd):
+    case = BY_NAME["loop-container-worktree"]
+    assert case.check(replace(expected("loop-container-worktree"), commands=[cmd])) == []
 
 
 def test_green_gate_package_that_derives_the_gate_fails():

@@ -24,13 +24,20 @@ Every mechanical step is a script call. The scripts:
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/store" <resolve|contract> ...
-uv run "${CLAUDE_PLUGIN_ROOT}/scripts/loop.py" <checkout|row|first|state|guard|commit-impl|fixup|fold> ...
+uv run "${CLAUDE_PLUGIN_ROOT}/scripts/loop.py" <checkout|row|first|state|guard|commit-impl|fixup|fold|git> ...
 uv run "${CLAUDE_PLUGIN_ROOT}/scripts/host.py" <pr|checks> ...
 ```
 
 Below, `store`, `loop.py` and `host.py` stand for these three calls. `loop.py --help` and
 `host.py --help` describe each subcommand's arguments and output.
 A non-zero exit you do not expect ends the step: show the message and stop.
+
+## Where things run
+
+The repository's commands and its gate run where its rules say, in a dev container if it has
+one. `loop.py`, `host.py` and every git call on the worktree run on this machine. Make each
+git call on the worktree as `loop.py git <worktree> -- <git args>`. It works on a worktree
+made in a container too, and its output and exit code are git's own.
 
 ## What starts what
 
@@ -162,7 +169,7 @@ Invoke `superpowers:subagent-driven-development` on the plan. These rules hold o
 
 As SDD runs, append each review round's findings and how each was resolved, every dispute
 and every ruling SDD made to `closed-loop-review.md` in the worktree's git dir
-(`git rev-parse --absolute-git-dir`), so a resumed run can still write *Review*.
+(`loop.py git <worktree> -- rev-parse --absolute-git-dir`), so a resumed run can still write *Review*.
 
 After SDD's final review: `loop.py state <worktree> step=gate`.
 
@@ -187,7 +194,7 @@ A concern about the gate itself goes into the package under *Open*; it is not a 
 - **Red with `fix_rounds` at 2** → [stop](#stops): no push, no pull request.
 
 **CI as the gate**, where the contract says the CI is the gate: push the branch **unfolded**
-(`git push -u origin <branch>`) — a fold now would rewrite the commits the `tests_*` ranges
+(`loop.py git <worktree> -- push -u origin <branch>`) — a fold now would rewrite the commits the `tests_*` ranges
 name, and every later guard would check ranges that no longer exist. Open the pull request
 with `host.py pr` as in [Package](#package) step 4, with an interim body, and record
 `loop.py state <worktree> pr=<url>` with the `url` of its JSON. Wait with
@@ -211,16 +218,16 @@ code decides:
 
 1. **Fold** each unit into one commit, now that the gate is green — on the CI path this
    happened already in [Gate](#gate): `loop.py fold <worktree> <base>`, `<base>` the commit
-   the branch started from (`git merge-base origin/<default branch> HEAD`). Code and its
+   the branch started from (`loop.py git <worktree> -- merge-base origin/<default branch> HEAD`). Code and its
    tests land together, under the implementer's message. Exit 1 → the fold is undone; show
    its message and [stop](#stops) as *fold failed*.
-2. Push the branch: `git push -u origin <branch>` (`--force-with-lease` when it was pushed
+2. Push the branch: `loop.py git <worktree> -- push -u origin <branch>` (`--force-with-lease` when it was pushed
    before the fold).
 3. Write the body to a file outside the working tree — the worktree's git dir
-   (`git rev-parse --absolute-git-dir`). Its sections, their names and their order are the
+   (`loop.py git <worktree> -- rev-parse --absolute-git-dir`). Its sections, their names and their order are the
    contract's, each as a `## <Name>` heading, English, filled as the contract describes.
    Where a section needs data from this run:
-   - *What changes*: one line per commit of `git log <base>..HEAD`, with its reason.
+   - *What changes*: one line per commit of `loop.py git <worktree> -- log <base>..HEAD`, with its reason.
    - *Gate*: the three recorded facts — the command, the contract's line for its source, where
      it ran — and the result: exit code, and the output's tail on failure; for the CI as
      gate, its checks and their results.
