@@ -11,7 +11,6 @@
 ### Open
 - [XAS-099 — An eval run on Windows reads no login from the real APPDATA](xas-099.md)
 - [XAS-096 — The evidence package's steps name the pull request without its number](xas-096.md)
-- [XAS-095 — The closed loop opens the pull request where the host's CLI login is, also for a repository with a dev container](xas-095.md)
 - [XAS-093 — A board card links an item in a personal Bitbucket Server repository](xas-093.md)
 - [XAS-092 — The closed loop takes the demo story DEMO-002 from the board to a green pull request](xas-092.md)
 - [XAS-091 — Subprocess coverage measures only the scripts under test, not the test fakes](xas-091.md)
@@ -139,6 +138,7 @@
 - [XAS-002 — Rename repo and restructure as agentic-skills marketplace](xas-002.md)
 
 ### Superseded
+- [XAS-095 — The closed loop opens the pull request where the host's CLI login is, also for a repository with a dev container](xas-095.md)
 - [XAS-067 — Bitbucket Server and Jenkins host the closed loop's pull request and checks](xas-067.md)
 
 ---
