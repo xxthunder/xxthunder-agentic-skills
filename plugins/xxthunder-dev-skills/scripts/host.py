@@ -41,7 +41,8 @@ Exit codes (both subcommands):
   2  unsupported remote: "unsupported remote <url>: <what is missing>", the URL without
      any user:password@
   3  the host call failed or the checks timed out: the CLI's or API's message; also a
-     usage error (a missing or unknown argument)
+     usage error (a missing or unknown argument), and a worktree made in a dev container
+     whose git directory is not found here (its paths are mapped through gitpaths.py)
 
 Gitea: `tea pr create` / `tea pr edit` (with --login and --repo) open or update the pull
 request; the REST API (<login url>/api/v1, the login's token) finds the open one by its
@@ -84,6 +85,8 @@ from typing import Callable, Protocol
 from urllib.parse import quote, urlparse
 
 import yaml
+
+from gitpaths import worktree_env
 
 SCP_RE = re.compile(r"^(?:[^@/]+@)?(?P<host>[^:/]+):(?P<path>.+)$")
 DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
@@ -605,6 +608,11 @@ def main(argv: list[str] | None = None) -> int:
         # gh runs in the worktree, so a relative path must not depend on its cwd.
         args.body_file = str(Path(args.body_file).resolve())
     url = None
+    try:
+        os.environ.update(worktree_env(args.worktree))
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 3
     try:
         url = remote_url(args.worktree)
         backend = choose(*split_remote(url))

@@ -38,6 +38,12 @@ Subcommands (output is JSON on stdout, errors go to stderr):
       Folds every amend!/fixup! commit of <base>..HEAD into its target with a
       non-interactive autosquash rebase: {"head": <sha>, "commits": <n>}. On a conflict the
       rebase is aborted, HEAD stays as it was, exit 1.
+  git <worktree> -- <git args...>
+      Runs git on the worktree, with the paths of a worktree made in a container mapped;
+      output and exit code are git's.
+
+Every subcommand that takes a worktree or repo maps the paths of a worktree made in a dev
+container (gitpaths.py); exit 2 when no git directory matches.
 
 Stdlib only; no shell, so it runs on Windows.
 """
@@ -52,6 +58,8 @@ import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
+
+from gitpaths import worktree_env
 
 SCP_RE = re.compile(r"^[^@/]+@[^:/]+:(?P<path>.+)$")
 UNESCAPED_PIPE_RE = re.compile(r"(?<!\\)\|")
@@ -246,6 +254,11 @@ def cmd_fold(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_git(args: argparse.Namespace) -> int:
+    rest = args.args[1:] if args.args[:1] == ["--"] else args.args
+    return subprocess.run(["git", "-C", args.worktree, *rest]).returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Closed-loop helper lookups.")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -294,8 +307,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("base")
     p.set_defaults(func=cmd_fold)
 
+    p = sub.add_parser("git", help="run git on a worktree, container paths mapped")
+    p.add_argument("worktree")
+    p.add_argument("args", nargs=argparse.REMAINDER)
+    p.set_defaults(func=cmd_git)
+
     args = parser.parse_args(argv)
     try:
+        target = getattr(args, "worktree", None) or getattr(args, "repo", None)
+        if target:
+            os.environ.update(worktree_env(target))
         return args.func(args)
     except ValueError as e:
         print(str(e), file=sys.stderr)

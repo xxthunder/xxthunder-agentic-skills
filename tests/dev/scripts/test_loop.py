@@ -8,6 +8,7 @@ are literal values written by hand. No shell, so the tests run on Windows too.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -538,3 +539,174 @@ def test_fixup_runs_the_pre_commit_hook(tmp_path):
     block_commits(r)
     assert run("fixup", r, b).returncode == 1
     assert git("rev-parse", "HEAD", cwd=r) == b
+
+
+# ---------- container worktree ----------
+# A worktree that git made inside a dev container has a `.git` file naming a path of the
+# container. The fixture simulates it without a container: a normal worktree whose `.git`
+# file is overwritten.
+
+CONTAINER_GITDIR = "gitdir: /workspaces/repo/.git/worktrees/t\n"
+
+
+def write_gitfile(worktree: Path, text: str) -> None:
+    # Git for Windows hides .git, and Windows refuses to open a hidden file for writing.
+    (worktree / ".git").unlink()
+    (worktree / ".git").write_text(text, encoding="utf-8", newline="\n")
+
+
+def container_worktree(tmp_path: Path) -> tuple[Path, Path]:
+    checkout = tmp_path / "repo"
+    checkout.mkdir()
+    git("init", "-q", "-b", "develop", cwd=checkout)
+    for key, value in (("user.name", "Test"), ("user.email", "test@example.com"),
+                       ("commit.gpgsign", "false")):
+        git("config", key, value, cwd=checkout)
+    (checkout / "f.txt").write_text("x", encoding="utf-8")
+    git("add", "f.txt", cwd=checkout)
+    git("commit", "-q", "-m", "init", cwd=checkout)
+    worktree = checkout / ".worktrees" / "t"
+    git("worktree", "add", "-q", ".worktrees/t", "-b", "feature/t", cwd=checkout)
+    write_gitfile(worktree, CONTAINER_GITDIR)
+    return checkout, worktree
+
+
+def wt_git(worktree: Path, checkout: Path, *args) -> str:
+    env = dict(os.environ)
+    env["GIT_DIR"] = str(checkout / ".git" / "worktrees" / "t")
+    env["GIT_WORK_TREE"] = str(worktree)
+    return subprocess.run(
+        ["git", "-c", "user.name=T", "-c", "user.email=t@example.com", *args],
+        cwd=str(worktree), check=True, capture_output=True, text=True, env=env,
+    ).stdout.strip()
+
+
+def assert_gitfile_untouched(worktree: Path) -> None:
+    assert (worktree / ".git").read_bytes() == CONTAINER_GITDIR.encode("utf-8")
+
+
+def test_container_worktree_plain_git_fails(tmp_path):
+    checkout, worktree = container_worktree(tmp_path)
+    res = subprocess.run(
+        ["git", "-C", str(worktree), "status"], capture_output=True, text=True,
+    )
+    assert res.returncode != 0
+    assert_gitfile_untouched(worktree)
+
+
+def test_state_maps_container_worktree(tmp_path):
+    checkout, worktree = container_worktree(tmp_path)
+    assert ok("state", worktree, "item=XAS-1") == {"item": "XAS-1"}
+    assert (checkout / ".git" / "worktrees" / "t" / "closed-loop.json").exists()
+    assert_gitfile_untouched(worktree)
+
+
+def test_state_maps_from_subdirectory(tmp_path):
+    checkout, worktree = container_worktree(tmp_path)
+    sub = worktree / "sub"
+    sub.mkdir()
+    assert ok("state", sub, "item=XAS-1") == {"item": "XAS-1"}
+    assert (checkout / ".git" / "worktrees" / "t" / "closed-loop.json").exists()
+    assert_gitfile_untouched(worktree)
+
+
+def test_guard_maps_container_worktree(tmp_path):
+    checkout, worktree = container_worktree(tmp_path)
+    base = wt_git(worktree, checkout, "rev-parse", "HEAD")
+    (worktree / "tests").mkdir()
+    (worktree / "tests" / "test_a.py").write_text("a\n", encoding="utf-8")
+    wt_git(worktree, checkout, "add", "tests/test_a.py")
+    wt_git(worktree, checkout, "commit", "-q", "-m", "tests")
+    tests = wt_git(worktree, checkout, "rev-parse", "HEAD")
+    (worktree / "tests" / "test_a.py").write_text("a changed\n", encoding="utf-8")
+    wt_git(worktree, checkout, "add", "tests/test_a.py")
+    wt_git(worktree, checkout, "commit", "-q", "-m", "impl")
+    impl = wt_git(worktree, checkout, "rev-parse", "HEAD")
+    res = run("guard", worktree, "--tests", f"{base}..{tests}", "--impl", f"{tests}..{impl}")
+    assert res.returncode == 1, res.stderr
+    assert json.loads(res.stdout) == {"ok": False, "touched": ["tests/test_a.py"]}
+    assert_gitfile_untouched(worktree)
+
+
+def test_commit_impl_and_fixup_map_container_worktree(tmp_path):
+    checkout, worktree = container_worktree(tmp_path)
+    (worktree / "t.py").write_text("test\n", encoding="utf-8")
+    wt_git(worktree, checkout, "add", "t.py")
+    wt_git(worktree, checkout, "commit", "-q", "-m", "test: pin it")
+    b = wt_git(worktree, checkout, "rev-parse", "HEAD")
+    (worktree / "impl.py").write_text("impl\n", encoding="utf-8")
+    wt_git(worktree, checkout, "add", "impl.py")
+    msg = tmp_path / "msg.txt"
+    msg.write_text("feat: make it pass\n", encoding="utf-8")
+    got = ok("commit-impl", worktree, b, msg)
+    assert got == {"commit": wt_git(worktree, checkout, "rev-parse", "HEAD")}
+    assert wt_git(worktree, checkout, "log", "-1", "--format=%s") == f"amend! {b}"
+    (worktree / "t.py").write_text("test fixed\n", encoding="utf-8")
+    wt_git(worktree, checkout, "add", "t.py")
+    got = ok("fixup", worktree, b)
+    assert got == {"commit": wt_git(worktree, checkout, "rev-parse", "HEAD")}
+    assert wt_git(worktree, checkout, "log", "-1", "--format=%s") == f"fixup! {b}"
+    assert_gitfile_untouched(worktree)
+
+
+def test_fold_maps_container_worktree(tmp_path):
+    checkout, worktree = container_worktree(tmp_path)
+    backlink = checkout / ".git" / "worktrees" / "t" / "gitdir"
+    before = backlink.read_bytes()
+    (worktree / "t.py").write_text("test\n", encoding="utf-8")
+    wt_git(worktree, checkout, "add", "t.py")
+    wt_git(worktree, checkout, "commit", "-q", "-m", "test: pin it")
+    b = wt_git(worktree, checkout, "rev-parse", "HEAD")
+    (worktree / "impl.py").write_text("impl\n", encoding="utf-8")
+    wt_git(worktree, checkout, "add", "impl.py")
+    msg = tmp_path / "msg.txt"
+    msg.write_text("feat: make it pass\n", encoding="utf-8")
+    ok("commit-impl", worktree, b, msg)
+    got = ok("fold", worktree, "develop")
+    assert got["commits"] == 1
+    assert got["head"] == wt_git(worktree, checkout, "rev-parse", "HEAD")
+    assert backlink.read_bytes() == before
+    assert_gitfile_untouched(worktree)
+
+
+def test_git_passthrough_maps_container_worktree(tmp_path):
+    checkout, worktree = container_worktree(tmp_path)
+    res = run("git", worktree, "--", "rev-parse", "--abbrev-ref", "HEAD")
+    assert res.returncode == 0, res.stderr
+    assert res.stdout == "feature/t\n"
+    assert_gitfile_untouched(worktree)
+
+
+def test_git_passthrough_keeps_exit_code(tmp_path):
+    checkout, worktree = container_worktree(tmp_path)
+    res = run("git", worktree, "--", "rev-parse", "--verify", "--quiet", "nope")
+    assert res.returncode == 1
+    assert res.stdout == ""
+    assert_gitfile_untouched(worktree)
+
+
+def test_git_passthrough_plain_worktree(tmp_path):
+    r = make_repo(tmp_path)
+    git("branch", "-m", "develop", cwd=r)
+    res = run("git", r, "--", "rev-parse", "--abbrev-ref", "HEAD")
+    assert res.returncode == 0, res.stderr
+    assert res.stdout == "develop\n"
+
+
+def test_unmatched_container_gitdir_names_path(tmp_path):
+    checkout, worktree = container_worktree(tmp_path)
+    other = "gitdir: /workspaces/other/.git/worktrees/zz\n"
+    write_gitfile(worktree, other)
+    res = run("state", worktree)
+    assert res.returncode != 0
+    assert "/workspaces/other/.git/worktrees/zz" in res.stderr
+    assert (worktree / ".git").read_bytes() == other.encode("utf-8")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the path could exist on Windows")
+def test_backslash_container_gitdir_maps(tmp_path):
+    checkout, worktree = container_worktree(tmp_path)
+    text = "gitdir: C:\\workspaces\\repo\\.git\\worktrees\\t\n"
+    write_gitfile(worktree, text)
+    assert ok("state", worktree, "item=XAS-1") == {"item": "XAS-1"}
+    assert (worktree / ".git").read_bytes() == text.encode("utf-8")
