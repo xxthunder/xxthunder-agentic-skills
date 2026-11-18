@@ -143,7 +143,9 @@ the registry's tables, turns a remote into its org and repo, finds the first
 file a contract names, keeps the loop's state in the worktree's git directory,
 guards that the implementer left the tester's files alone, and commits and
 folds the loop's commits with git's autosquash, the repository's hooks
-included (ADR-0016). `adr.py`, a PEP 723 script with `tomlkit` as its one
+included (ADR-0016). `gitpaths.py`, which `loop.py` and `host.py` import, maps the paths of a
+worktree made in a dev container, whose `.git` file names a container path, to the checkout's
+git directory, so git works there unchanged. `adr.py`, a PEP 723 script with `tomlkit` as its one
 dependency, is another: `design-record` runs `adr.py migrate` where a root
 `ubproject.toml` switches sphinx-needs on. It turns every ADR header written in
 the template into a `decision` need, keeping the bold-field lines below it,
