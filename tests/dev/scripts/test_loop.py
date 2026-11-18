@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -710,3 +711,86 @@ def test_backslash_container_gitdir_maps(tmp_path):
     write_gitfile(worktree, text)
     assert ok("state", worktree, "item=XAS-1") == {"item": "XAS-1"}
     assert (worktree / ".git").read_bytes() == text.encode("utf-8")
+
+
+# ---------- find ----------
+
+CONTAINER_BACKLINK = "/workspaces/repo/.worktrees/t/.git\n"
+
+
+def test_worktree_env_plain_linked_worktree(tmp_path):
+    r = make_repo(tmp_path)
+    wt = tmp_path / "wt"
+    git("worktree", "add", "-q", "-b", "feature/x", str(wt), cwd=r)
+    assert ok("state", wt, "item=X") == {"item": "X"}
+    name = wt.name
+    state_file = r / ".git" / "worktrees" / name / "closed-loop.json"
+    assert json.loads(state_file.read_text(encoding="utf-8")) == {"item": "X"}
+
+
+def test_find_container_worktree(tmp_path):
+    checkout, worktree = container_worktree(tmp_path)
+    ok("state", worktree, "item=XAS-1")
+    backlink = checkout / ".git" / "worktrees" / "t" / "gitdir"
+    backlink.write_text(CONTAINER_BACKLINK, encoding="utf-8", newline="\n")
+    got = ok("find", checkout, "XAS-1")
+    assert Path(got["worktree"]).resolve() == worktree.resolve()
+    assert got["state"]["item"] == "XAS-1"
+    assert_gitfile_untouched(worktree)
+    assert backlink.read_bytes() == CONTAINER_BACKLINK.encode("utf-8")
+
+
+def test_find_plain_worktree(tmp_path):
+    r = make_repo(tmp_path)
+    wt = tmp_path / "wt"
+    git("worktree", "add", "-q", "-b", "feature/x", str(wt), cwd=r)
+    ok("state", wt, "item=XAS-2")
+    got = ok("find", r, "XAS-2")
+    assert Path(got["worktree"]).resolve() == wt.resolve()
+    assert got["state"]["item"] == "XAS-2"
+
+
+def test_find_main_checkout(tmp_path):
+    r = make_repo(tmp_path)
+    ok("state", r, "item=XAS-3")
+    got = ok("find", r, "XAS-3")
+    assert Path(got["worktree"]).resolve() == r.resolve()
+    assert got["state"]["item"] == "XAS-3"
+
+
+def test_find_unknown_id(tmp_path):
+    r = make_repo(tmp_path)
+    ok("state", r, "item=XAS-3")
+    res = run("find", r, "XAS-9")
+    assert res.returncode == 1
+    assert "not found: XAS-9" in res.stderr
+
+
+def test_find_two_states_for_one_id_exits_1(tmp_path):
+    checkout, worktree = container_worktree(tmp_path)
+    ok("state", worktree, "item=XAS-1")
+    ok("state", checkout, "item=XAS-1")
+    res = run("find", checkout, "XAS-1")
+    assert res.returncode == 1
+    assert "XAS-1" in res.stderr
+
+
+def test_find_state_without_worktree_here_exits_1(tmp_path):
+    # The state survives in the git dir, but the back-link is gone and no directory of
+    # the checkout has a `.git` file naming the worktree.
+    checkout, worktree = container_worktree(tmp_path)
+    ok("state", worktree, "item=XAS-1")
+    (checkout / ".git" / "worktrees" / "t" / "gitdir").unlink()
+    shutil.rmtree(worktree)
+    res = run("find", checkout, "XAS-1")
+    assert res.returncode == 1
+    assert "state of XAS-1 found in" in res.stderr
+    assert "but no worktree here" in res.stderr
+    assert "not found" not in res.stderr
+
+
+def test_find_outside_a_git_checkout_exits_1(tmp_path):
+    res = run("find", tmp_path, "XAS-1")
+    assert res.returncode == 1
+    assert res.stderr.strip()
+    assert res.stdout == ""

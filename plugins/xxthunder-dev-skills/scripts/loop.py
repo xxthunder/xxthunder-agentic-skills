@@ -42,8 +42,15 @@ Subcommands (output is JSON on stdout, errors go to stderr):
       Runs git on the worktree, with the paths of a worktree made in a container mapped;
       output and exit code are git's.
 
+  find <checkout> <ID>
+      The loop state of item <ID>, looked for in the checkout's git dir and in every
+      <common git dir>/worktrees/*/closed-loop.json: {"worktree": <absolute path on this
+      machine>, "state": {...}}. The path of a linked worktree is derived here, not read from
+      a back-link that names a container path. Exit 1 when no state, or two states, hold <ID>.
+
 Every subcommand that takes a worktree or repo maps the paths of a worktree made in a dev
-container (gitpaths.py); exit 2 when no git directory matches.
+container (gitpaths.py). When no git directory matches, it exits 2 with its message on
+stderr, before git runs (git itself can also exit 2).
 
 Stdlib only; no shell, so it runs on Windows.
 """
@@ -259,6 +266,57 @@ def cmd_git(args: argparse.Namespace) -> int:
     return subprocess.run(["git", "-C", args.worktree, *rest]).returncode
 
 
+def worktree_dir(checkout: Path, name: str, link: Path) -> Path | None:
+    """The machine path of the linked worktree called `name`, or None."""
+    try:
+        target = Path(link.read_text(encoding="utf-8").strip()).parent
+    except OSError:
+        target = None
+    if target is not None and target.is_dir():
+        return target
+    for here, dirs, files in os.walk(checkout):
+        if ".git" in files:
+            text = (Path(here) / ".git").read_text(encoding="utf-8", errors="replace")
+            first = next((ln for ln in text.splitlines() if ln.startswith("gitdir:")), "")
+            if re.split(r"[/\\]", first.rstrip("/\\"))[-2:] == ["worktrees", name]:
+                return Path(here)
+        dirs[:] = [d for d in dirs if d != ".git" and d != "node_modules"]
+    return None
+
+
+def cmd_find(args: argparse.Namespace) -> int:
+    out = git(args.checkout, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    if out.returncode != 0:
+        return fail(out, "not a git checkout")
+    common = Path(out.stdout.strip())
+    checkout = Path(args.checkout).resolve()
+    candidates: list[tuple[Path, str | None]] = [(common / STATE_FILE, None)]
+    candidates += [(f, f.parent.name) for f in sorted((common / "worktrees").glob(f"*/{STATE_FILE}"))]
+    found = []
+    for file, name in candidates:
+        if not file.is_file():
+            continue
+        state = json.loads(file.read_text(encoding="utf-8"))
+        if state.get("item") != args.id:
+            continue
+        if name is None:
+            path = common.parent
+        else:
+            path = worktree_dir(checkout, name, file.parent / "gitdir")
+            if path is None:
+                print(f"state of {args.id} found in {file.parent}, but no worktree here", file=sys.stderr)
+                return 1
+        found.append({"worktree": str(path), "state": state})
+    if not found:
+        print(f"not found: {args.id}", file=sys.stderr)
+        return 1
+    if len(found) > 1:
+        print(f"two states for {args.id}: " + ", ".join(f["worktree"] for f in found), file=sys.stderr)
+        return 1
+    print(json.dumps(found[0]))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Closed-loop helper lookups.")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -312,9 +370,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("args", nargs=argparse.REMAINDER)
     p.set_defaults(func=cmd_git)
 
+    p = sub.add_parser("find", help="the state and worktree path of an item")
+    p.add_argument("checkout")
+    p.add_argument("id")
+    p.set_defaults(func=cmd_find)
+
     args = parser.parse_args(argv)
     try:
-        target = getattr(args, "worktree", None) or getattr(args, "repo", None)
+        target = (getattr(args, "worktree", None) or getattr(args, "repo", None)
+                  or getattr(args, "checkout", None))
         if target:
             os.environ.update(worktree_env(target))
         return args.func(args)

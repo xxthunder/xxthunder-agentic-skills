@@ -24,7 +24,7 @@ Every mechanical step is a script call. The scripts:
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/store" <resolve|contract> ...
-uv run "${CLAUDE_PLUGIN_ROOT}/scripts/loop.py" <checkout|row|first|state|guard|commit-impl|fixup|fold|git> ...
+uv run "${CLAUDE_PLUGIN_ROOT}/scripts/loop.py" <checkout|row|first|state|guard|commit-impl|fixup|fold|git|find> ...
 uv run "${CLAUDE_PLUGIN_ROOT}/scripts/host.py" <pr|checks> ...
 ```
 
@@ -169,7 +169,8 @@ Invoke `superpowers:subagent-driven-development` on the plan. These rules hold o
 
 As SDD runs, append each review round's findings and how each was resolved, every dispute
 and every ruling SDD made to `closed-loop-review.md` in the worktree's git dir
-(`loop.py git <worktree> -- rev-parse --absolute-git-dir`), so a resumed run can still write *Review*.
+(`loop.py git <worktree> -- rev-parse --absolute-git-dir`), so a resumed run can still
+write *Review*.
 
 After SDD's final review: `loop.py state <worktree> step=gate`.
 
@@ -194,10 +195,10 @@ A concern about the gate itself goes into the package under *Open*; it is not a 
 - **Red with `fix_rounds` at 2** → [stop](#stops): no push, no pull request.
 
 **CI as the gate**, where the contract says the CI is the gate: push the branch **unfolded**
-(`loop.py git <worktree> -- push -u origin <branch>`) — a fold now would rewrite the commits the `tests_*` ranges
-name, and every later guard would check ranges that no longer exist. Open the pull request
-with `host.py pr` as in [Package](#package) step 4, with an interim body, and record
-`loop.py state <worktree> pr=<url>` with the `url` of its JSON. Wait with
+(`loop.py git <worktree> -- push -u origin <branch>`); a fold now would rewrite the commits
+the `tests_*` ranges name, and every later guard would check ranges that no longer exist.
+Open the pull request with `host.py pr` as in [Package](#package) step 4, with an interim
+body, and record `loop.py state <worktree> pr=<url>` with the `url` of its JSON. Wait with
 `host.py checks <worktree> --head <branch>`: exit 0 is green, exit 1 is a red check and so
 a red gate (same rounds; push each fix unfolded, then wait again). All green → fold
 ([Package](#package) step 1), push with `--force-with-lease`, and wait once more with
@@ -218,16 +219,18 @@ code decides:
 
 1. **Fold** each unit into one commit, now that the gate is green — on the CI path this
    happened already in [Gate](#gate): `loop.py fold <worktree> <base>`, `<base>` the commit
-   the branch started from (`loop.py git <worktree> -- merge-base origin/<default branch> HEAD`). Code and its
+   the branch started from
+   (`loop.py git <worktree> -- merge-base origin/<default branch> HEAD`). Code and its
    tests land together, under the implementer's message. Exit 1 → the fold is undone; show
    its message and [stop](#stops) as *fold failed*.
-2. Push the branch: `loop.py git <worktree> -- push -u origin <branch>` (`--force-with-lease` when it was pushed
-   before the fold).
+2. Push the branch: `loop.py git <worktree> -- push -u origin <branch>`
+   (`--force-with-lease` when it was pushed before the fold).
 3. Write the body to a file outside the working tree — the worktree's git dir
-   (`loop.py git <worktree> -- rev-parse --absolute-git-dir`). Its sections, their names and their order are the
-   contract's, each as a `## <Name>` heading, English, filled as the contract describes.
-   Where a section needs data from this run:
-   - *What changes*: one line per commit of `loop.py git <worktree> -- log <base>..HEAD`, with its reason.
+   (`loop.py git <worktree> -- rev-parse --absolute-git-dir`). Its sections, their names and
+   their order are the contract's, each as a `## <Name>` heading, English, filled as the
+   contract describes. Where a section needs data from this run:
+   - *What changes*: one line per commit of `loop.py git <worktree> -- log <base>..HEAD`,
+     with its reason.
    - *Gate*: the three recorded facts — the command, the contract's line for its source, where
      it ran — and the result: exit code, and the output's tail on failure; for the CI as
      gate, its checks and their results.
@@ -277,9 +280,14 @@ Milestones get a notification too: plan written, gate green or red, pull request
 
 1. [Find the item](#find-the-item-its-repository-the-contract) and
    [the gate and rubric](#find-the-gate-and-the-rubric) again.
-2. Find the state: `loop.py state <path>` for the target checkout and each of its worktrees
-   (`git worktree list`). A state whose `item` is another item → say which item it holds and
-   ask before anything else. No state → say so and offer [Start](#start).
+2. Find the state: `loop.py find <checkout> <ID>`, with the target checkout. It prints the
+   `worktree` on this machine and the `state` of the item. Use that `worktree` for every
+   later call. Exit 1 with the message `not found: <ID>` → there is no state: say so and
+   offer [Start](#start). Any other exit 1 → show `find`'s message and stop; the author
+   decides.
+   `find` names only the state of the ID, so also run `loop.py state <checkout>`: a state
+   there whose `item` is another item → say which item it holds and ask before anything
+   else.
 3. A state with `stop` set, or `step=dispute` with `exchanges` at 2: the stop still stands.
    With the author's answer in this message, act on it and clear the stop
    (`stop=`); without one, present the stop again as in [Stops](#stops).
