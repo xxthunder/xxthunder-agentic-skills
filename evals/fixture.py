@@ -199,6 +199,9 @@ class State:
     # each branch of the demo remote but develop: its subjects not on develop (newest first), its text files
     demo_remote_branch_subjects: dict[str, list[str]] = field(default_factory=dict)
     demo_remote_branch_files: dict[str, dict[str, str]] = field(default_factory=dict)
+    # <demo>/.git/worktrees/<name>/closed-loop.json per linked worktree, and each worktree's `.git` file text
+    worktree_states: dict[str, dict] = field(default_factory=dict)
+    worktree_git_files: dict[str, str] = field(default_factory=dict)
 
 
 def snapshot(sandbox: Path, output: str, skills: list[str], commands: list[str] | None = None) -> State:
@@ -227,6 +230,12 @@ def snapshot(sandbox: Path, output: str, skills: list[str], commands: list[str] 
         r = subprocess.run(["git", "show", f"{b}:scripts/gate"], cwd=demo, capture_output=True, text=True, encoding="utf-8")
         if r.returncode == 0:
             gates[b] = r.stdout
+    wt_states, wt_git_files = {}, {}
+    for wt in sorted((demo / ".git" / "worktrees").glob("*")):
+        if (wt / "closed-loop.json").exists():
+            wt_states[wt.name] = json.loads((wt / "closed-loop.json").read_text(encoding="utf-8"))
+    for dot_git in sorted((demo / ".worktrees").glob("*/.git")):
+        wt_git_files[dot_git.parent.name] = dot_git.read_text(encoding="utf-8")
     demo_bare = sandbox / "remotes" / "demo.git"
     remote_branches = git(demo_bare, "branch", "--format=%(refname:short)").split()
     features = [b for b in remote_branches if b != BRANCH]
@@ -241,6 +250,8 @@ def snapshot(sandbox: Path, output: str, skills: list[str], commands: list[str] 
                  loop_state=(json.loads(state_file.read_text(encoding="utf-8")) if state_file.exists() else {}),
                  demo_branches=branches,
                  demo_remote_branches=remote_branches,
+                 worktree_states=wt_states,
+                 worktree_git_files=wt_git_files,
                  demo_gate_by_branch=gates,
                  demo_remote_branch_subjects={b: git(demo_bare, "log", "--format=%s", f"{BRANCH}..{b}").splitlines()
                                               for b in features},
