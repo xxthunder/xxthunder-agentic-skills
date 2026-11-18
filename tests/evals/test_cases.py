@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from evals.board import BOARD_FILE, card, jira_card
-from evals.cases import ADR_ONE, ADR_ONE_ORIGINAL, ADR_TWO, ADR_TWO_ROW, ADR_TWO_STALE, CASES, NEEDS_UBPROJECT, REFUSING_UBPROJECT, CONTAINER_GITDIR, FEATURE_BRANCH, RUBRIC, flagged, gate_script
+from evals.cases import ADR_ONE, ADR_ONE_ORIGINAL, ADR_TWO, ADR_TWO_ROW, ADR_TWO_STALE, CASES, NEEDS_UBPROJECT, REFUSING_UBPROJECT, CONTAINER_BACKLINK, CONTAINER_GITDIR, FEATURE_BRANCH, RUBRIC, flagged, gate_script
 from evals.fixture import INITIAL_NEXT, INITIAL_PROGRESS, ITEMS, JIRA_ISSUES, State, build, display_id
 
 REPO = Path(__file__).resolve().parents[2]
@@ -119,7 +119,8 @@ def expected(name: str) -> State:
     if name == "loop-container-worktree":
         return replace(s, gh_calls=[{"args": ["pr", "create", "--body-file", "-"], "body": PACKAGE_BODY}],
                        worktree_states={"demo-007": {"item": "DEMO-007", "step": "done"}},
-                       worktree_git_files={"demo-007": CONTAINER_GITDIR})
+                       worktree_git_files={"demo-007": CONTAINER_GITDIR},
+                       worktree_backlinks={"demo-007": CONTAINER_BACKLINK})
     if name == "loop-ci-gate":
         return ci_gate_end_state()
     if name == "loop-unsupported-remote":
@@ -331,6 +332,8 @@ def test_container_worktree_fails_on_an_unread_state_or_a_rewritten_git_file():
     stuck = replace(ok, worktree_states={"demo-007": {"step": "gate"}})
     assert any("not 'done'" in f for f in case.check(stuck))
     assert any(".git file changed" in f for f in case.check(replace(ok, worktree_git_files={"demo-007": "gitdir: x\n"})))
+    assert any("back-link" in f for f in case.check(replace(ok, worktree_backlinks={"demo-007": "/x/.git\n"})))
+    assert any("back-link" in f for f in case.check(replace(ok, worktree_backlinks={})))
 
 
 HAND_SET = ["GIT_DIR=/x git status", "export GIT_DIR=/x", "cd w && GIT_WORK_TREE=/x git log",

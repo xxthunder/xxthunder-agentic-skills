@@ -602,6 +602,7 @@ def setup_loop_at_gate(demo: Path, gate_exit: int) -> None:
 
 
 CONTAINER_GITDIR = "gitdir: /workspaces/demo/.git/worktrees/demo-007\n"
+CONTAINER_BACKLINK = "/workspaces/demo/.worktrees/demo-007/.git\n"
 
 
 def setup_loop_container_worktree(demo: Path) -> None:
@@ -621,6 +622,7 @@ def setup_loop_container_worktree(demo: Path) -> None:
     subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "feat: health endpoint (DEMO-007)"], cwd=wt, check=True)
     loop_state(wt, "item=DEMO-007", f"branch={FEATURE_BRANCH}", "step=gate", "fix_rounds=0")
     (wt / ".git").write_text(CONTAINER_GITDIR, encoding="utf-8", newline="\n")
+    (demo / ".git" / "worktrees" / "demo-007" / "gitdir").write_text(CONTAINER_BACKLINK, encoding="utf-8", newline="\n")
 
 
 def setup_loop_dispute(demo: Path) -> None:
@@ -769,7 +771,9 @@ def check_loop_container_worktree(s: State) -> list[str]:
     return (f + expect(not hand_set, f"git was pointed at the worktree by hand: {[c[:120] for c in hand_set]}")
             + expect(step == "done", f"state in .git/worktrees/demo-007 has step {step!r}, not 'done'")
             + expect(s.worktree_git_files.get("demo-007") == CONTAINER_GITDIR,
-                     f"the worktree's .git file changed: {s.worktree_git_files.get('demo-007')!r}"))
+                     f"the worktree's .git file changed: {s.worktree_git_files.get('demo-007')!r}")
+            + expect(s.worktree_backlinks.get("demo-007") == CONTAINER_BACKLINK,
+                     f"the back-link in .git/worktrees/demo-007/gitdir changed: {s.worktree_backlinks.get('demo-007')!r}"))
 
 
 CI_WORKFLOW = ".github/workflows/ci.yml"

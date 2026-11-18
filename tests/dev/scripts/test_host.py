@@ -103,6 +103,34 @@ def test_github_pr_on_container_worktree(tmp_path):
     assert (work / ".git").read_bytes() == gitfile.encode("utf-8")
 
 
+def test_pr_on_unmatched_container_gitdir(tmp_path):
+    """No `.git/worktrees/<name>` matches the container path: exit 3, the path named."""
+    bin_dir = write_gh(tmp_path, token={"github.com": "t"}, pr_list="",
+                       create_url="https://github.com/o/r/pull/7")
+    checkout = tmp_path / "repo"
+    checkout.mkdir()
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    subprocess.run([*git, "init", "-q", "-b", "develop"], cwd=checkout, check=True,
+                   capture_output=True)
+    subprocess.run([*git, "remote", "add", "origin", GH_URL], cwd=checkout, check=True,
+                   capture_output=True)
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "init"], cwd=checkout,
+                   check=True, capture_output=True)
+    subprocess.run([*git, "worktree", "add", "-q", ".worktrees/t", "-b", "feat"],
+                   cwd=checkout, check=True, capture_output=True)
+    work = checkout / ".worktrees" / "t"
+    gitfile = "gitdir: /workspaces/other/.git/worktrees/zz\n"
+    # Git for Windows hides .git, and Windows refuses to open a hidden file for writing.
+    (work / ".git").unlink()
+    (work / ".git").write_text(gitfile, encoding="utf-8", newline="\n")
+    body = tmp_path / BODY
+    body.write_text("B", encoding="utf-8")
+    r = run(*pr_args(work, body), env=env(tmp_path, bin_dir))
+    assert r.returncode == 3
+    assert "/workspaces/other/.git/worktrees/zz" in r.stderr
+    assert (work / ".git").read_bytes() == gitfile.encode("utf-8")
+
+
 def test_github_pr_updates_open_pr(tmp_path):
     url = "https://github.com/o/r/pull/3"
     bin_dir = write_gh(tmp_path, token={"github.com": "t"}, pr_list=url,
