@@ -31,3 +31,25 @@ XAS-026b ships Codecov reporting only — no thresholds. Once the numbers have s
   24 lines missing, 18 of them eval-only code in `evals/`. The gate runs `pytest -q` without
   `--cov`, so the closed loop could not see the gap and pushed it. Coverage is a number a
   script decides, so it goes into the gate, not into `docs/rubric.md`.
+- **Baseline** (Q&A, 2026-11-19). Codecov check runs of PRs 39 to 47: project coverage
+  91.2% to 98.0%, 97.4% to 98.0% since PR 41. Patch coverage 100% on most PRs, 92.5% on
+  PR 41, 85.5% on the last head of PR 46. Without a `codecov.yml`, Codecov compares the
+  project with the base at 0% threshold, so PR 46 and PR 47 failed `codecov/project` on a
+  dip of 0.39%.
+- **Project rule: `target: auto`, `threshold: 1%`** (author, 2026-11-19). It follows the
+  base and stops the false alarms of a small dip. No fixed number has to be raised by hand.
+- **Patch target: 90%** (author, 2026-11-19). It catches PR 46 (85.5%) and lets PR 41
+  (92.5%) pass. Codecov and the gate use this one number.
+- **`codecov.yml` holds the patch target; the gate reads it from there** (Q&A,
+  2026-11-19). The file Codecov reads cannot read another file, so the number lives in
+  it, and the gate parses it with `pyyaml`, which the dev group already has.
+- **The gate measures patch coverage with `diff-cover`** (Q&A, 2026-11-19), against
+  `origin/develop` and with the patch target as `--fail-under`. It is the known tool for
+  this job, so the gate does not compute the diff coverage itself.
+- **Eval-session code is excluded from the measurement** (author, 2026-11-19), AC 7.
+  `evals/cases.py` and `evals/fixture.py` run only in eval sessions, and the evals verify
+  them. They go into `omit` under `[tool.coverage.run]`. Other files in `evals/` that
+  pytest tests, such as `evals/gate.py`, stay measured.
+- **The loop opens the dip PR of AC 3** (author, 2026-11-19). After the main pull request
+  is green, a draft pull request from its branch adds an untested function. The red
+  `codecov/patch` check goes into the evidence package, and the draft is then closed.
