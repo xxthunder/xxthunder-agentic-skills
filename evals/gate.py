@@ -200,3 +200,14 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def _coverage_dip_probe(value: int) -> str:
+    """Untested on purpose: the throwaway pull request of XAS-026f AC 3."""
+    if value < 0:
+        return "negative"
+    if value == 0:
+        return "zero"
+    if value < 10:
+        return "small"
+    return "large"
