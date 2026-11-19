@@ -61,7 +61,8 @@ can exercise the plugin helper scripts and the hook.
 The same holds for the push gate, which also ships to nobody. `evals/` runs
 behavioural eval cases headless against `xxthunder-dev-skills` at a git ref and
 keeps their results outside the checkout (ADR-0012). `scripts/gate` runs pytest
-and then checks those results for the cases a change asks for; it never runs an
+with coverage, checks the patch coverage against the target in `codecov.yml` with
+`diff-cover`, and then checks those results for the cases a change asks for; it never runs an
 eval (ADR-0014). `.githooks/pre-push`, installed with `core.hooksPath`, calls
 the gate before every push.
 
@@ -410,7 +411,8 @@ sequenceDiagram
     participant R as Eval results (outside the checkout)
     U->>H: git push
     H->>G: --pre-push, pushed refs on stdin
-    G->>T: pytest -q
+    G->>T: pytest -q --cov
+    G->>G: diff-cover against origin/develop, target from codecov.yml
     loop each pushed commit
         G->>G: touched skills and changed cases since the merge-base
         G->>R: results for the plugin version and case fingerprint

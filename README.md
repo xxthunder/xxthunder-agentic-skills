@@ -175,6 +175,16 @@ To run with coverage and the JUnit report locally (matches CI):
 uv run --group dev pytest --cov --cov-report=xml --junit-xml=junit.xml
 ```
 
+### Coverage thresholds
+
+`codecov.yml` holds the project rule and the patch target.
+
+`scripts/gate` reads the same patch target from `codecov.yml`. It runs `diff-cover`
+against `origin/develop` and fails when the changed lines fall below the target.
+
+To change a threshold, edit `codecov.yml` only, and keep the numbers out of other files.
+Set each number from the coverage that pull requests show in practice.
+
 ### CI secrets
 
 CI uploads coverage and test results to [Codecov](https://about.codecov.io/) and
