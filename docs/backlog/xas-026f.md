@@ -1,6 +1,6 @@
 # [XAS-026f] Coverage thresholds via codecov.yml
 
-**Status**: Open
+**Status**: In Progress
 **Priority**: Low
 **Component**: `codecov.yml`, `scripts/gate` (`evals/gate.py`), `pyproject.toml`
 
