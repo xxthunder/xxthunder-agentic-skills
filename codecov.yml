@@ -1,0 +1,10 @@
+# The gate reads the patch target from this file (evals/gate.py, patch_target).
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: 90%

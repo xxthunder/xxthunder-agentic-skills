@@ -17,10 +17,13 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+import yaml
+
 from evals.__main__ import REPO_ROOT, results_dir
 from evals.runner import PLUGIN
 
 BASE = "origin/develop"
+CODECOV = "codecov.yml"
 FINGERPRINT = Path(__file__).with_name("fingerprint.py")
 SCRIPT = """\
 import json, sys
@@ -30,6 +33,18 @@ from evals.fingerprint import fingerprint, own, shared
 h = shared(Path(sys.argv[1]), CASES)
 print(json.dumps({c.name: [getattr(c, "skill", None), own(c), fingerprint(c, h)] for c in CASES}))
 """
+
+
+def patch_target(repo: Path) -> float:
+    """The patch coverage target in percent, read from codecov.yml."""
+    key = "coverage.status.patch.default.target"
+    try:
+        node = yaml.safe_load((repo / CODECOV).read_text())
+        for part in key.split("."):
+            node = node[part]
+    except (OSError, KeyError, TypeError):
+        raise ValueError(f"{CODECOV} has no {key}") from None
+    return float(str(node).rstrip("%"))
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
