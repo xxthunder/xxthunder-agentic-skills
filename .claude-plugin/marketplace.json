@@ -10,8 +10,8 @@
   "plugins": [
     {
       "name": "xxthunder-dev-skills",
-      "description": "Reusable Claude Code skills: refinement, retrospective, commit-helper, backlog-ops, design-record, architecture-scan, learnings, logbook, next, closed-loop",
-      "version": "2.15.0",
+      "description": "Reusable Claude Code skills: refinement, retrospective, commit-helper, backlog-ops, design-record, architecture-scan, learnings, logbook, next, closed-loop, criticmark-review",
+      "version": "2.16.0",
       "source": "./plugins/xxthunder-dev-skills/"
     },
     {
