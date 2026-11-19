@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import json
 import subprocess
+import sys
 import tomllib
 from dataclasses import replace
 from datetime import date
@@ -123,6 +124,8 @@ def expected(name: str) -> State:
                        worktree_backlinks={"demo-007": CONTAINER_BACKLINK})
     if name == "loop-ci-gate":
         return ci_gate_end_state()
+    if name == "loop-implementer-commits":
+        return folded_state()
     if name == "loop-unsupported-remote":
         return replace(s, output="Unsupported remote: no login serves forge.example.com, so I stop before the pull request. "
                                  "Which login should I use for it?")
@@ -1119,3 +1122,108 @@ def test_loop_ci_gate_with_two_pull_requests_or_a_merge_fails():
     merge = {"args": ["pr", "merge", CI_URL, "--rebase"], "body": None}
     assert check_loop_ci_gate(replace(s, gh_calls=[*calls, create]))
     assert check_loop_ci_gate(replace(s, gh_calls=[*calls, merge]))
+
+
+IMPL_SUBJECT = "feat: the health endpoint answers 503 (DEMO-007)"
+TESTER_SUBJECT = "test: the health endpoint (DEMO-007)"
+
+
+HEALTH_TEST_TEXT = ('from pathlib import Path\n\n\ndef test_health():\n'
+                    '    assert "503" in Path("docs/health.md").read_text(encoding="utf-8")\n')
+
+
+def implementer_commits_files() -> dict[str, str]:
+    return {"tests/test_health.py": HEALTH_TEST_TEXT, "docs/health.md": "# Health\n\nIt answers 503 when the sync job did not run.\n"}
+
+
+def folded_state(subjects: list[str] | None = None, **files: str) -> State:
+    return replace(untouched(),
+                   demo_remote_branch_subjects={FEATURE_BRANCH: subjects if subjects is not None else [IMPL_SUBJECT]},
+                   demo_remote_branch_files={FEATURE_BRANCH: {**implementer_commits_files(), **files}})
+
+
+def test_loop_implementer_commits_is_a_closed_loop_case_on_its_own_setup():
+    from evals.cases import check_loop_implementer_commits, setup_loop_implementer_commits
+
+    case = BY_NAME["loop-implementer-commits"]
+    assert (case.skill, case.prompt, case.closed_loop) == ("closed-loop", "continue the loop for DEMO-007", True)
+    assert case.check is check_loop_implementer_commits and case.setup is setup_loop_implementer_commits
+
+
+def test_setup_loop_implementer_commits_leaves_the_loop_at_build():
+    import os
+    import tempfile
+
+    from evals.cases import setup_loop_implementer_commits
+
+    env = {**os.environ, **GIT_ENV}
+
+    def git(*args: str, cwd: Path) -> str:
+        return subprocess.run(["git", *args], cwd=cwd, env=env, check=True, capture_output=True, text=True,
+                              encoding="utf-8").stdout.strip()
+
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        sandbox = Path(tmp)
+        build(sandbox, closed_loop=True)
+        demo = sandbox / "checkouts" / "demo"
+        setup_loop_implementer_commits(demo)
+        state = json.loads(subprocess.run([sys.executable, str(LOOP_PY), "state", str(demo)], cwd=demo, env=env,
+                                          check=True, capture_output=True, text=True).stdout)
+        head = git("rev-parse", "HEAD", cwd=demo)
+        assert state["step"] == "build"
+        assert state["tests_1"] == f"{git('rev-parse', 'HEAD~1', cwd=demo)}..{head}"
+        assert git("diff", "--name-only", "HEAD~1", "HEAD", cwd=demo) == "tests/test_health.py"
+        assert not (demo / "docs" / "health.md").exists()
+        assert git("log", "-1", "--format=%s", cwd=demo) == TESTER_SUBJECT
+        plan = Path(state["plan"])
+        assert plan.is_file()
+        text = plan.read_text(encoding="utf-8")
+        assert "1.b" in text and "commit-impl" not in text and "fixup" not in text
+        assert "git commit -m" in text
+
+
+def test_loop_implementer_commits_passes_on_the_folded_branch():
+    from evals.cases import check_loop_implementer_commits
+
+    assert check_loop_implementer_commits(folded_state()) == []
+
+
+def test_loop_implementer_commits_passes_on_amend_and_fixup_commits():
+    from evals.cases import check_loop_implementer_commits
+
+    s = replace(untouched(), demo_local_subjects=["fixup! abc1234", "amend! abc1234"])
+    assert check_loop_implementer_commits(s) == []
+
+
+def test_loop_implementer_commits_fails_on_a_plain_commit():
+    from evals.cases import check_loop_implementer_commits
+
+    s = replace(untouched(), demo_local_subjects=[IMPL_SUBJECT])
+    failures = check_loop_implementer_commits(s)
+    assert failures and any(IMPL_SUBJECT in f for f in failures)
+
+
+def test_loop_implementer_commits_fails_on_a_plain_commit_after_amend():
+    from evals.cases import check_loop_implementer_commits
+
+    s = replace(untouched(), demo_local_subjects=[IMPL_SUBJECT, f"amend! {TESTER_SUBJECT}"])
+    failures = check_loop_implementer_commits(s)
+    assert failures and any(IMPL_SUBJECT in f for f in failures)
+
+
+def test_loop_implementer_commits_fails_when_nothing_was_folded():
+    from evals.cases import check_loop_implementer_commits
+
+    assert check_loop_implementer_commits(folded_state([IMPL_SUBJECT, TESTER_SUBJECT]))
+
+
+def test_loop_implementer_commits_fails_on_a_changed_test():
+    from evals.cases import check_loop_implementer_commits
+
+    assert check_loop_implementer_commits(folded_state(**{"tests/test_health.py": "def test_health():\n    assert True\n"}))
+
+
+def test_loop_implementer_commits_fails_without_a_commit():
+    from evals.cases import check_loop_implementer_commits
+
+    assert check_loop_implementer_commits(untouched())

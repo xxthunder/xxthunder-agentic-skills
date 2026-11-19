@@ -893,6 +893,68 @@ def check_loop_ci_gate(s: State) -> list[str]:
             + expect(bool(s.loop_state.get("pr")), "no pr in the loop state"))
 
 
+def setup_loop_implementer_commits(demo: Path) -> None:
+    """The loop at its build step: a unit whose tester commit B is done and whose implementer task 1.b
+    is next. Task 1.b ends with a plain `git commit` step and names neither `commit-impl` nor `fixup`.
+    Nothing of the branch is pushed."""
+    test_text = (
+        "from pathlib import Path\n\n\n"
+        "def test_health():\n"
+        f"    assert \"{HEALTH_MARKER}\" in Path(\"{HEALTH_DOC}\").read_text(encoding=\"utf-8\")\n")
+    plan_text = (
+        "# Plan: DEMO-007 health endpoint\n\n"
+        "## Unit 1\n\n"
+        "### Task 1.a (tester)\n\n"
+        "Done in commit `{tester}`.\n\n"
+        "### Task 1.b (implementer)\n\n"
+        f"- [ ] **Step 1: Write** `{HEALTH_DOC}` so that `{HEALTH_TEST}` passes: `GET /health` answers 200 "
+        "while the sync job ran in the last two hours, and 503 when it did not.\n"
+        "- [ ] **Step 2: Run** `pytest` and see it pass.\n"
+        "- [ ] **Step 3: Commit**\n\n"
+        "```bash\n"
+        f"git add {HEALTH_DOC}\n"
+        'git commit -m "feat: the health endpoint answers 503 (DEMO-007)"\n'
+        "```\n")
+    setup_gate(demo, 0)
+    rev = ["git", "rev-parse", "HEAD"]
+    develop = subprocess.run(rev, cwd=demo, check=True, capture_output=True, text=True).stdout.strip()
+    subprocess.run(["git", "checkout", "-q", "-b", FEATURE_BRANCH], cwd=demo, check=True)
+    (demo / HEALTH_TEST).parent.mkdir(exist_ok=True)
+    (demo / HEALTH_TEST).write_text(test_text, encoding="utf-8", newline="\n")
+    subprocess.run(["git", "add", HEALTH_TEST], cwd=demo, check=True)
+    subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "test: the health endpoint (DEMO-007)"],
+                   cwd=demo, check=True)
+    tester = subprocess.run(rev, cwd=demo, check=True, capture_output=True, text=True).stdout.strip()
+    git_dir = subprocess.run(["git", "rev-parse", "--absolute-git-dir"], cwd=demo, check=True,
+                             capture_output=True, text=True).stdout.strip()
+    plan = Path(git_dir) / "closed-loop-plan.md"
+    plan.write_text(plan_text.format(tester=tester), encoding="utf-8", newline="\n")
+    loop_state(demo, "item=DEMO-007", f"branch={FEATURE_BRANCH}", "step=build", "fix_rounds=0", "exchanges=0",
+               f"tests_1={develop}..{tester}", f"plan={plan}")
+
+
+def check_loop_implementer_commits(s: State) -> list[str]:
+    test_text = (
+        "from pathlib import Path\n\n\n"
+        "def test_health():\n"
+        f"    assert \"{HEALTH_MARKER}\" in Path(\"{HEALTH_DOC}\").read_text(encoding=\"utf-8\")\n")
+    subjects = s.demo_remote_branch_subjects.get(FEATURE_BRANCH)
+    if subjects is not None:
+        files = s.demo_remote_branch_files.get(FEATURE_BRANCH, {})
+        f = expect(len(subjects) == 1, f"the pushed branch is not one commit over develop: {subjects}")
+        f += expect(not subjects or not subjects[0].startswith(("amend!", "fixup!", "test:")),
+                    f"the one commit is not the folded unit: {subjects[:1]}")
+        return (f + expect(files.get(HEALTH_TEST) == test_text, f"{HEALTH_TEST} changed or missing on the pushed branch")
+                + expect(HEALTH_MARKER in files.get(HEALTH_DOC, ""),
+                         f"{HEALTH_DOC} on the pushed branch does not name {HEALTH_MARKER}"))
+    local = s.demo_local_subjects
+    plain = [sub for sub in local if not sub.startswith(("amend! ", "fixup! "))]
+    return (expect(bool(local), "the run made no commit and pushed no branch")
+            + expect(not local or local[-1].startswith("amend! "),
+                     f"the oldest commit is not an amend! of the tester commit: {local[-1:]}")
+            + expect(not plain, f"a plain commit, not a fixup! or amend!: {plain}"))
+
+
 def check_loop_no_gate(s: State) -> list[str]:
     plans = [f for f in s.demo_files if re.search(r"plan", f, re.I)]
     return (no_gh_call(s) + invoked(s, "closed-loop")
@@ -1171,6 +1233,8 @@ CASES = [
          closed_loop=True, setup=setup_loop_container_worktree),
     Case("loop-ci-gate", "closed-loop", "continue the loop for DEMO-007", check_loop_ci_gate,
          closed_loop=True, setup=setup_loop_ci_gate),
+    Case("loop-implementer-commits", "closed-loop", "continue the loop for DEMO-007", check_loop_implementer_commits,
+         closed_loop=True, setup=setup_loop_implementer_commits),
     Case("loop-unsupported-remote", "closed-loop", "continue the loop for DEMO-007", check_loop_unsupported_remote,
          closed_loop=True, setup=setup_loop_unsupported_remote),
     Case("loop-open-dispute", "closed-loop", "continue the loop for DEMO-007", check_loop_open_dispute,
