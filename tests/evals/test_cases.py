@@ -272,6 +272,9 @@ def expected(name: str) -> State:
     if name == "architecture-drift":
         return replace(s, skills=["xxthunder-dev-skills:architecture-scan"],
                        output="- `src/export/` is undocumented.\n- `src/importer/` no longer exists.")
+    if name == "review-reply":
+        return replace(s, demo_files={REVIEW_FILE: REVIEW_REPLIED}, demo_porcelain=f" M {REVIEW_FILE}\n",
+                       commands=[f'uv run criticmark.py reply {REVIEW_FILE} 2 "503: it never ran."'])
     if name == "commit":
         return replace(s, demo_local_subjects=["docs: describe the health endpoint (DEMO-007)"],
                        demo_head_message="docs: describe the health endpoint (DEMO-007)\n\n"
@@ -316,6 +319,39 @@ def test_every_skill_has_a_case():
 
 def test_every_case_has_a_unique_name():
     assert len(BY_NAME) == len(CASES)
+
+
+REVIEW_FILE = "docs/plan.md"
+REVIEW_TEXT = ("# Plan: health endpoint\n\n"
+               "Add `GET /health` that answers {==200 when the sync job ran in the last hour==}"
+               '{author="Max" date="2026-11-17">>And when it never ran? 200 or 503?<<}.\n\n'
+               "Keep the handler in `src/sync/`.\n")
+REVIEW_REPLIED = REVIEW_TEXT.replace("503?<<}", '503?<<}{author="Claude" date="2026-11-18">>503: it never ran.<<}')
+
+
+@pytest.mark.parametrize("change", [
+    {"commands": []},  # the reply was written by hand, not through the script
+    {"demo_files": {REVIEW_FILE: REVIEW_REPLIED.replace("Keep the handler", "Put the handler")}},
+    {"demo_files": {REVIEW_FILE: REVIEW_TEXT.replace("503?<<}", "503?<<} 503.")}},  # an answer outside the thread
+])
+def test_review_reply_fails_on_a_hand_edit_or_a_change_beyond_the_reply(change):
+    assert BY_NAME["review-reply"].check(replace(expected("review-reply"), **change))
+
+
+def test_review_reply_accepts_a_second_point_as_a_new_comment():
+    second = REVIEW_REPLIED.replace("Keep the handler in", '{==Keep the handler in==}{author="Claude" date="2026-11-18">>Why here?<<}')
+    assert BY_NAME["review-reply"].check(replace(expected("review-reply"), demo_files={REVIEW_FILE: second})) == []
+    before = REVIEW_REPLIED.replace("that answers", '{==that answers==}{author="Claude" date="2026-11-18">>Why an hour?<<}')
+    assert BY_NAME["review-reply"].check(replace(expected("review-reply"), demo_files={REVIEW_FILE: before})) == []
+
+
+def test_review_setup_commits_the_plan_under_review(tmp_path):
+    build(tmp_path)
+    demo = tmp_path / "checkouts" / "demo"
+    BY_NAME["review-reply"].setup(demo)
+    assert (demo / REVIEW_FILE).read_text(encoding="utf-8") == REVIEW_TEXT
+    status = subprocess.run(["git", "status", "--porcelain"], cwd=demo, check=True, capture_output=True, text=True)
+    assert status.stdout == ""
 
 
 def test_loop_start_ignores_the_harness_pr_view_after_a_push():
