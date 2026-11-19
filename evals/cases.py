@@ -511,6 +511,37 @@ def check_drift(s: State) -> list[str]:
             + expect(bool(re.search(r"src/importer|\bimporter\b", o, re.I)), "vanished src/importer/ not reported"))
 
 
+def setup_review(demo: Path) -> None:
+    # self-contained, like the check below: a module-level constant would change every case's fingerprint
+    text = ("# Plan: health endpoint\n\n"
+            "Add `GET /health` that answers {==200 when the sync job ran in the last hour==}"
+            '{author="Max" date="2026-11-17">>And when it never ran? 200 or 503?<<}.\n\n'
+            "Keep the handler in `src/sync/`.\n")
+    (demo / "docs" / "plan.md").write_text(text, encoding="utf-8", newline="\n")
+    subprocess.run(["git", "add", "docs/plan.md"], cwd=demo, check=True)
+    subprocess.run(["git", *IDENTITY, "commit", "-q", "-m", "docs: plan for review"], cwd=demo, check=True)
+
+
+def check_review_reply(s: State) -> list[str]:
+    original = ("# Plan: health endpoint\n\n"
+                "Add `GET /health` that answers {==200 when the sync job ran in the last hour==}"
+                '{author="Max" date="2026-11-17">>And when it never ran? 200 or 503?<<}.\n\n'
+                "Keep the handler in `src/sync/`.\n")
+    text = s.demo_files.get("docs/plan.md", "")
+    question = "200 or 503?<<}"
+    rest = text[text.index(question) + len(question):] if question in text else ""
+    reply = re.match(r'\{author="[^"]+" date="\d{4}-\d{2}-\d{2}">>(?:(?!<<\}).)+<<\}', rest, re.S)
+    # a second point may go into a new comment; the text outside the marks stays as it was
+    added = r'\{author="(?!Max")[^"]+" date="\d{4}-\d{2}-\d{2}">>(?:(?!<<\}).)+<<\}'
+    prose = re.sub(r"\{==(.*?)==\}", r"\1", re.sub(added, "", text, flags=re.S), flags=re.S)
+    return (expect(any("criticmark.py" in c and " reply " in f" {c} " for c in s.commands),
+                   f"no criticmark.py reply: {s.commands}")
+            + expect(reply is not None, f"no reply right after the thread: {text!r}")
+            + expect(prose == re.sub(r"\{==(.*?)==\}", r"\1", original), f"text changed outside the marks: {text!r}")
+            + no_local_commit(s) + no_store_commit(s)
+            + expect(not s.demo_remote_subjects, f"demo remote changed: {s.demo_remote_subjects}"))
+
+
 FEATURE_BRANCH = "feature/DEMO-007-health-endpoint"
 
 
@@ -1107,6 +1138,8 @@ CASES = [
          check_adr_asks),
     Case("architecture-drift", "architecture-scan", "is the architecture doc still true?", check_drift),
     Case("commit", "commit-helper", "commit this", check_commit, setup=setup_feature_branch),
+    Case("review-reply", "criticmark-review", "I left a comment in docs/plan.md, your turn",
+         check_review_reply, setup=setup_review),
     Case("refinement-bootstrap", "refinement",
          "let's refine. There is no backlog yet: put it in docs/backlog/ with the ID prefix SYNC, "
          "and I have no initial ideas.", check_bootstrap, setup=setup_greenfield),

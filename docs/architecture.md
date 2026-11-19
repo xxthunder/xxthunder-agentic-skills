@@ -98,6 +98,7 @@ flowchart TB
         loop --> storesh
         loop --> backpy
         loop -.superpowers: writing-plans, SDD.-> sdd["superpowers"]
+        review["criticmark-review"] --> cmpy["scripts/criticmark.py"]
         hook["hooks/session-start"]
     end
     subgraph paper["xxthunder-paperless-skills"]
