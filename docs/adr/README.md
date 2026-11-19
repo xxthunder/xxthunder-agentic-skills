@@ -27,6 +27,7 @@ Why this repository looks the way it does. One decision per file, at
 | [0018](0018-requirements-are-binding-where-sphinx-needs-is-in-use.md) | Requirements are a binding design artifact where sphinx-needs is in use | Accepted | 2026-11-08 |
 | [0019](0019-an-adrs-need-mirrors-its-markdown-header.md) | An ADR's need mirrors its Markdown header | Accepted | 2026-11-10 |
 | [0020](0020-the-loops-scripts-run-on-the-machine-and-map-container-worktrees.md) | The loop's scripts run on the machine and map container worktrees | Accepted | 2026-11-18 |
+| [0021](0021-the-gate-checks-patch-coverage-with-the-target-from-codecov-yml.md) | The gate checks patch coverage with the target from codecov.yml | Accepted | 2026-11-19 |
 
 ---
 

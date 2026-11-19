@@ -1,6 +1,6 @@
-# [XAS-026f] Coverage thresholds via codecov.yml
+# [XAS-026f] ✅ DONE - Coverage thresholds via codecov.yml
 
-**Status**: In Progress
+**Status**: Done (2026-11-19)
 **Priority**: Low
 **Component**: `codecov.yml`, `scripts/gate` (`evals/gate.py`), `pyproject.toml`
 
@@ -13,13 +13,13 @@ XAS-026b ships Codecov reporting only — no thresholds. Once the numbers have s
 **Depends on**: XAS-026b (need a stable baseline before setting numbers)
 
 **Acceptance Criteria**:
-- [ ] `codecov.yml` at repo root defines a `coverage.status.project` rule with `target` (a sensible baseline observed from recent PRs) and `threshold` (small allowed dip, e.g., 1%)
-- [ ] `coverage.status.patch` rule enforces a target on the PR diff itself (catches new code that ships untested)
-- [ ] At least one PR exercises the rule (deliberate dip below threshold) and the Codecov check fails as expected
-- [ ] README or CONTRIBUTING notes the threshold policy and how to update it
-- [ ] `scripts/gate` measures coverage and fails when the patch coverage against `origin/develop` is below the patch target
-- [ ] The gate and `codecov.yml` take the patch target from one place
-- [ ] Code that runs only in eval sessions (`evals/cases.py`, `evals/fixture.py`) is covered by pytest or excluded from the measurement, by a decision written in this item
+- [x] `codecov.yml` at repo root defines a `coverage.status.project` rule with `target` (a sensible baseline observed from recent PRs) and `threshold` (small allowed dip, e.g., 1%)
+- [x] `coverage.status.patch` rule enforces a target on the PR diff itself (catches new code that ships untested)
+- [x] At least one PR exercises the rule (deliberate dip below threshold) and the Codecov check fails as expected
+- [x] README or CONTRIBUTING notes the threshold policy and how to update it
+- [x] `scripts/gate` measures coverage and fails when the patch coverage against `origin/develop` is below the patch target
+- [x] The gate and `codecov.yml` take the patch target from one place
+- [x] Code that runs only in eval sessions (`evals/cases.py`, `evals/fixture.py`) is covered by pytest or excluded from the measurement, by a decision written in this item
 
 **Technical Notes**:
 - Set numbers from observed baseline, not from a wishlist — too-aggressive targets cause merge friction without quality gain.
