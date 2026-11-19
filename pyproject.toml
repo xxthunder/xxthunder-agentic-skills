@@ -26,3 +26,5 @@ testpaths = ["tests"]
 [tool.coverage.run]
 source = ["plugins", "evals"]
 patch = ["subprocess"]  # scripts the tests run as subprocesses count too
+# These run only in eval sessions, and the evals verify them (XAS-026f).
+omit = ["evals/cases.py", "evals/fixture.py"]
