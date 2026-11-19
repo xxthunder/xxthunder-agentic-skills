@@ -9,7 +9,6 @@
 ## Table of Contents
 
 ### Open
-- [XAS-102 — An eval run on macOS finds the Claude login](xas-102.md)
 - [XAS-100 — loop.py find locates a container worktree without walking the checkout](xas-100.md)
 - [XAS-099 — An eval run on Windows reads no login from the real APPDATA](xas-099.md)
 - [XAS-096 — The evidence package's steps name the pull request without its number](xas-096.md)
@@ -75,6 +74,7 @@
 - [XAS-001 — Backlog refinement](xas-001.md)
 
 ### Done
+- [XAS-102 — An eval run on macOS finds the Claude login](xas-102.md)
 - [XAS-098 — An eval case covers the closed loop's CI as the gate, and each eval run has its own HOME](xas-098.md)
 - [XAS-097 — The closed loop's GitHub checks read a re-run check by its newest attempt](xas-097.md)
 - [XAS-094 — The closed loop's GitHub checks never read an empty check list as green, and name the checks they read](xas-094.md)
