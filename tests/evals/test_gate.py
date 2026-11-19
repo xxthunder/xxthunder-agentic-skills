@@ -5,6 +5,7 @@ import io
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -289,21 +290,21 @@ def test_changed_paths_are_not_quoted(repo):
     assert gate.changed_paths(repo, base, head) == [f"{PLUGIN}/skills/next/größe.md"]
 
 
-def test_pytest_gets_no_stdin(monkeypatch):
+def test_pytest_gets_no_stdin(monkeypatch, tmp_path):
     seen = {}
     monkeypatch.setattr(gate.subprocess, "run", lambda cmd, **kw: seen.update(kw) or subprocess.CompletedProcess(cmd, 0))
-    assert gate.tests_pass()
+    assert gate.tests_pass(tmp_path / "coverage.xml")
     assert seen["stdin"] is subprocess.DEVNULL  # the pre-push hook's ref lines on stdin stay for the gate
 
 
-def test_pytest_gets_no_git_variables(monkeypatch):
+def test_pytest_gets_no_git_variables(monkeypatch, tmp_path):
     # git exports GIT_DIR and friends to hooks; pytest's own git calls must not inherit them (XAS-079).
     for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX"):
         monkeypatch.setenv(name, "/somewhere")
     monkeypatch.setenv("KEEP_ME", "1")
     seen = {}
     monkeypatch.setattr(gate.subprocess, "run", lambda cmd, **kw: seen.update(kw) or subprocess.CompletedProcess(cmd, 0))
-    assert gate.tests_pass()
+    assert gate.tests_pass(tmp_path / "coverage.xml")
     assert not [k for k in seen["env"] if k.startswith("GIT_")]
     assert seen["env"]["KEEP_ME"] == "1"
 
@@ -334,7 +335,7 @@ def test_tests_from_a_worktree_hook_stay_out_of_the_pushing_repository(tmp_path,
         return subprocess.CompletedProcess(cmd, 0)
 
     monkeypatch.setattr(gate.subprocess, "run", a_test_that_builds_its_own_repo)
-    assert gate.tests_pass()
+    assert gate.tests_pass(tmp_path / "coverage.xml")
     monkeypatch.undo()
     assert (git(real, "for-each-ref"), (real / ".git" / "config").read_text(encoding="utf-8")) == before
 
@@ -351,7 +352,8 @@ ZERO = "0" * 40
 @pytest.fixture
 def stubbed(monkeypatch):
     calls: list[str] = []
-    monkeypatch.setattr(gate, "tests_pass", lambda: True)
+    monkeypatch.setattr(gate, "tests_pass", lambda report: True)
+    monkeypatch.setattr(gate, "patch_covered", lambda report, target: True)
     monkeypatch.setattr(gate, "check", lambda repo, head, out=None: calls.append(head) or [])
     return calls
 
@@ -376,7 +378,7 @@ def test_problems_make_the_gate_red(stubbed, monkeypatch, capsys):
 
 
 def test_red_tests_make_the_gate_red(stubbed, monkeypatch, capsys):
-    monkeypatch.setattr(gate, "tests_pass", lambda: False)
+    monkeypatch.setattr(gate, "tests_pass", lambda report: False)
     assert gate.main([]) == 1
     assert capsys.readouterr().out.splitlines()[-1] == "gate: red"
 
@@ -412,3 +414,123 @@ def test_gate_files_keep_lf_line_endings():
         "scripts/gate: eol: lf",
         ".githooks/pre-push: eol: lf",
     ]
+
+
+def test_pytest_writes_a_coverage_report(monkeypatch, tmp_path):
+    seen = {}
+    monkeypatch.setattr(gate.subprocess, "run", lambda cmd, **kw: seen.update(cmd=cmd) or subprocess.CompletedProcess(cmd, 0))
+    report = tmp_path / "coverage.xml"
+    assert gate.tests_pass(report)
+    assert "--cov" in seen["cmd"]
+    assert f"--cov-report=xml:{report}" in seen["cmd"]
+
+
+def test_patch_covered_runs_diff_cover_against_develop(monkeypatch, tmp_path):
+    seen = {}
+    codes = iter([0, 1])
+    monkeypatch.setattr(gate.subprocess, "run",
+                        lambda cmd, **kw: seen.update(cmd=cmd, **kw) or subprocess.CompletedProcess(cmd, next(codes)))
+    report = tmp_path / "coverage.xml"
+    assert gate.patch_covered(report, 90.0) is True
+    assert seen["cmd"] == [sys.executable, "-m", "diff_cover.diff_cover_tool", str(report),
+                           "--compare-branch=origin/develop", "--fail-under=90"]
+    assert seen["cwd"] == gate.REPO_ROOT
+    assert gate.patch_covered(report, 90.0) is False
+
+
+def coverage_xml(path: Path, hits: list[int]) -> None:
+    lines = "".join(f'<line number="{n}" hits="{h}"/>' for n, h in enumerate(hits, 1))
+    path.write_text(
+        '<?xml version="1.0" ?>\n<coverage version="7" line-rate="0.5">'
+        "<sources><source>.</source></sources><packages>"
+        '<package name="." line-rate="0.5"><classes>'
+        f'<class name="mod.py" filename="mod.py"><methods/><lines>{lines}</lines></class>'
+        "</classes></package></packages></coverage>\n", encoding="utf-8")
+
+
+@pytest.fixture
+def branch(tmp_path, monkeypatch):
+    """A temporary repo whose `origin/develop` is its first commit; the gate runs inside it."""
+    r = tmp_path / "branch-repo"
+    r.mkdir()
+    git(r, "init", "-q", "-b", "develop")
+    git(r, "config", "user.name", "t")
+    git(r, "config", "user.email", "t@t")
+    git(r, "config", "core.autocrlf", "false")
+    (r / "README.md").write_text("# demo\n", encoding="utf-8")
+    commit(r, "base")
+    git(r, "update-ref", "refs/remotes/origin/develop", "HEAD")
+    monkeypatch.chdir(r)
+    monkeypatch.setattr(gate, "REPO_ROOT", r)
+    return r
+
+
+def add_module(r: Path) -> None:
+    (r / "mod.py").write_text("a = 1\nb = 2\nc = 3\nd = 4\n", encoding="utf-8")
+    commit(r, "add mod")
+
+
+def test_patch_covered_is_red_below_the_target(branch, tmp_path):
+    add_module(branch)
+    report = tmp_path / "coverage.xml"
+    coverage_xml(report, [1, 1, 0, 0])
+    assert gate.patch_covered(report, 90.0) is False
+
+
+def test_patch_covered_is_green_at_the_target(branch, tmp_path):
+    add_module(branch)
+    report = tmp_path / "coverage.xml"
+    coverage_xml(report, [1, 1, 1, 1])
+    assert gate.patch_covered(report, 90.0) is True
+
+
+def test_patch_covered_without_changed_lines_is_green(branch, tmp_path):
+    (branch / "README.md").write_text("# changed\n", encoding="utf-8")
+    commit(branch, "readme only")
+    report = tmp_path / "coverage.xml"
+    coverage_xml(report, [0, 0, 0, 0])
+    assert gate.patch_covered(report, 90.0) is True
+
+
+def test_low_patch_coverage_makes_the_gate_red(stubbed, monkeypatch, capsys):
+    monkeypatch.setattr(gate, "patch_covered", lambda report, target: False)
+    assert gate.main([]) == 1
+    out = capsys.readouterr().out
+    assert "patch coverage against origin/develop is below 90%" in out
+    assert out.splitlines()[-1] == "gate: red"
+
+
+def test_a_missing_patch_target_makes_the_gate_red(stubbed, monkeypatch, capsys):
+    message = "codecov.yml has no coverage.status.patch.default.target"
+    patch_calls = []
+
+    def no_target(repo):
+        raise ValueError(message)
+
+    monkeypatch.setattr(gate, "patch_target", no_target)
+    monkeypatch.setattr(gate, "patch_covered", lambda report, target: patch_calls.append(report) or True)
+    assert gate.main([]) == 1
+    out = capsys.readouterr().out
+    assert message in out
+    assert out.splitlines()[-1] == "gate: red"
+    assert patch_calls == []
+
+
+def test_red_tests_skip_the_patch_check(stubbed, monkeypatch, capsys):
+    patch_calls = []
+    monkeypatch.setattr(gate, "tests_pass", lambda report: False)
+    monkeypatch.setattr(gate, "patch_covered", lambda report, target: patch_calls.append(report) or True)
+    assert gate.main([]) == 1
+    out = capsys.readouterr().out
+    assert "pytest is red" in out
+    assert "patch coverage" not in out
+    assert patch_calls == []
+
+
+def test_main_writes_the_report_outside_the_repository(stubbed, monkeypatch):
+    reports = []
+    monkeypatch.setattr(gate, "tests_pass", lambda report: reports.append(report) or True)
+    monkeypatch.setattr(gate, "patch_covered", lambda report, target: reports.append(report) or True)
+    assert gate.main([]) == 0
+    assert len(reports) == 2 and reports[0] == reports[1]
+    assert not reports[0].resolve().is_relative_to(gate.REPO_ROOT.resolve())

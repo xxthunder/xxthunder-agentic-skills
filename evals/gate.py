@@ -1,6 +1,7 @@
 """uv run --group dev python -m evals.gate [--head REF] [--out DIR] [--pre-push]
 
-Runs pytest, then checks that every case a change asks for has its eval results:
+Runs pytest with coverage, checks the patch coverage against the target in codecov.yml,
+then checks that every case a change asks for has its eval results:
 3 of 3 green at the pushed commit, and for a new or changed case of a touched
 skill at least one failing run at the base commit. It never runs an eval.
 """
@@ -149,13 +150,20 @@ def check(repo: Path, head: str, out_root: str | None = None) -> list[str]:
     return problems
 
 
-def tests_pass() -> bool:
+def tests_pass(report: Path) -> bool:
     # No stdin: it holds the pre-push hook's ref lines, which the gate reads after pytest.
     # No GIT_* variables: git exports GIT_DIR to hooks, absolute from a worktree, and the tests'
     # own git calls would then act on the pushing repository instead of their tmp_path ones (XAS-079).
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    return subprocess.run([sys.executable, "-m", "pytest", "-q"], cwd=REPO_ROOT, stdin=subprocess.DEVNULL,
+    return subprocess.run([sys.executable, "-m", "pytest", "-q", "--cov", f"--cov-report=xml:{report}"], cwd=REPO_ROOT, stdin=subprocess.DEVNULL,
                           env=env).returncode == 0
+
+
+def patch_covered(report: Path, target: float) -> bool:
+    """True when diff-cover finds the changed lines against BASE covered at least *target* percent."""
+    return subprocess.run([sys.executable, "-m", "diff_cover.diff_cover_tool", str(report),
+                           f"--compare-branch={BASE}", f"--fail-under={target:g}"],
+                          cwd=REPO_ROOT, stdin=subprocess.DEVNULL).returncode == 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -166,7 +174,19 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--pre-push", action="store_true", help="check each pushed commit read from stdin, as git's pre-push hook passes them")
     a = ap.parse_args(argv)
 
-    problems = [] if tests_pass() else ["pytest is red"]
+    problems: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        report = Path(tmp) / "coverage.xml"
+        if not tests_pass(report):
+            problems.append("pytest is red")
+        else:
+            try:
+                target = patch_target(REPO_ROOT)
+            except ValueError as e:
+                problems.append(str(e))
+            else:
+                if not patch_covered(report, target):
+                    problems.append(f"patch coverage against {BASE} is below {target:g}%")
     if a.pre_push:
         # Each line: <local ref> <local sha> <remote ref> <remote sha>; an all-zero local SHA deletes a branch.
         heads = [f[1] for f in (line.split() for line in sys.stdin) if len(f) == 4 and f[1].strip("0")]
