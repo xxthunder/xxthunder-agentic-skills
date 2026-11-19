@@ -196,10 +196,20 @@ def test_clean_env_names_the_real_claude_config_dir_from_the_base(tmp_path):
     assert home_env(tmp_path, CLAUDE_CONFIG_DIR=str(real))["CLAUDE_CONFIG_DIR"] == str(real)
 
 
-def test_clean_env_names_the_default_claude_config_dir_when_the_base_sets_none(tmp_path):
+@pytest.mark.parametrize("platform", ["linux", "win32"])
+def test_clean_env_names_the_default_claude_config_dir_when_the_base_sets_none(tmp_path, monkeypatch, platform):
+    from evals import runner
+    monkeypatch.setattr(runner.sys, "platform", platform)
     env = home_env(tmp_path, HOME="/the/real/home")
     assert env["CLAUDE_CONFIG_DIR"] == str(config_dir({}))
     assert Path(env["CLAUDE_CONFIG_DIR"]).is_absolute()
+
+
+def test_clean_env_sets_no_claude_config_dir_on_macos_when_the_base_sets_none(tmp_path, monkeypatch):
+    # on macOS a set CLAUDE_CONFIG_DIR makes Claude Code look for another Keychain entry than the login's
+    from evals import runner
+    monkeypatch.setattr(runner.sys, "platform", "darwin")
+    assert "CLAUDE_CONFIG_DIR" not in home_env(tmp_path, HOME="/the/real/home")
 
 
 def test_clean_env_keeps_the_uv_python_install_dir_of_the_base(tmp_path):
@@ -211,6 +221,22 @@ def test_clean_env_asks_uv_for_its_python_dir_when_the_base_sets_none(tmp_path, 
     monkeypatch.delenv("UV_PYTHON_INSTALL_DIR", raising=False)
     asked = subprocess.run(["uv", "python", "dir"], capture_output=True, text=True, check=True).stdout.strip()
     assert home_env(tmp_path)["UV_PYTHON_INSTALL_DIR"] == asked
+
+
+@pytest.mark.parametrize("platform, linked", [("darwin", True), ("linux", False), ("win32", False)])
+def test_make_home_links_the_keychains_on_macos_only(tmp_path, monkeypatch, platform, linked):
+    # macOS finds the Claude login in the Keychain under HOME; a fresh HOME without it is logged out
+    from evals import runner
+    real = tmp_path / "real"
+    (real / "Library" / "Keychains").mkdir(parents=True)
+    monkeypatch.setattr(runner.sys, "platform", platform)
+    monkeypatch.setattr(runner.Path, "home", lambda: real)
+    link = runner.make_home(tmp_path / "sandbox") / "Library" / "Keychains"
+    assert link.is_symlink() == linked
+    if linked:
+        assert link.resolve() == (real / "Library" / "Keychains").resolve()
+        runner.remove_tree(tmp_path / "sandbox")
+        assert (real / "Library" / "Keychains").is_dir()
 
 
 def test_make_home_creates_a_home_with_a_git_identity(tmp_path):

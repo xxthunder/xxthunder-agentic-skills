@@ -4,7 +4,8 @@ A run sees only its sandbox: user settings are not loaded, MCP servers are
 not started, every store variable pair is cleared from the environment and
 only the pairs the case asks for point into the sandbox. Its HOME is a fresh
 directory in the sandbox with a git identity of its own; the Claude config
-directory and the uv Python directory keep pointing at the real ones.
+directory (except on macOS) and the uv Python directory keep pointing at the
+real ones.
 """
 from __future__ import annotations
 
@@ -108,6 +109,9 @@ def make_home(sandbox: Path) -> Path:
     home = home_of(sandbox)
     home.mkdir(parents=True, exist_ok=True)
     (home / ".gitconfig").write_text(f"[user]\n\tname = {EVAL_NAME}\n\temail = {EVAL_EMAIL}\n", encoding="utf-8")
+    if sys.platform == "darwin":  # Claude Code's login is in the Keychain, which macOS finds under HOME
+        (home / "Library").mkdir(exist_ok=True)
+        (home / "Library" / "Keychains").symlink_to(Path.home() / "Library" / "Keychains")
     return home
 
 
@@ -120,7 +124,8 @@ def clean_env(base: dict[str, str], sandbox: Path, board: bool, logbook: bool,
     home = home_of(sandbox)
     env["HOME"] = env["USERPROFILE"] = str(home)
     env["XDG_CONFIG_HOME"] = str(home / ".config")
-    env["CLAUDE_CONFIG_DIR"] = str(config_dir(base).absolute())
+    if sys.platform != "darwin" or base.get("CLAUDE_CONFIG_DIR"):  # macOS keeps the login in the Keychain, not here
+        env["CLAUDE_CONFIG_DIR"] = str(config_dir(base).absolute())
     env["UV_PYTHON_INSTALL_DIR"] = base.get("UV_PYTHON_INSTALL_DIR") or uv_python_dir()
     env["XDG_CACHE_HOME"] = str(sandbox / "cache")
     env["EVAL_SANDBOX"] = str(sandbox)  # where the fake gh records its calls
