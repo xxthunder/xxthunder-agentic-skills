@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-104 — The backlog is also found in doc/backlog](xas-104.md)
 - [XAS-100 — loop.py find locates a container worktree without walking the checkout](xas-100.md)
 - [XAS-099 — An eval run on Windows reads no login from the real APPDATA](xas-099.md)
 - [XAS-096 — The evidence package's steps name the pull request without its number](xas-096.md)
