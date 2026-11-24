@@ -30,7 +30,7 @@
 - [XAS-073 — A script writes the board table](xas-073.md)
 - [XAS-072 — The tester shows RED without a CI run when the tests run only in CI](xas-072.md)
 - [XAS-071 — The closed loop reaches its gate in a repository whose CI lints commit messages](xas-071.md)
-- [XAS-070 — The closed loop takes a GitHub issue as its item](xas-070.md)
+- [XAS-070 — The closed loop takes a GitHub or Jira issue as its item](xas-070.md)
 - [XAS-069 — The gate runs its tests without the push hook's git environment](xas-069.md)
 - [XAS-068 — An eval case for the closed loop's CI-as-gate path](xas-068.md)
 - [XAS-066 — A script finds a loop's state across worktrees on resume](xas-066.md)
