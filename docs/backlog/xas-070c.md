@@ -1,0 +1,60 @@
+# [XAS-070c] The closed loop takes a Jira issue as its item
+
+**Status**: Open
+**Priority**: Medium
+**Component**: `plugins/xxthunder-dev-skills/skills/closed-loop/SKILL.md`, `plugins/xxthunder-dev-skills/scripts/host.py`, `plugins/xxthunder-dev-skills/skills/backlog-ops/SKILL.md`
+**Depends on**: [XAS-070a](xas-070a.md)
+**Related**: [XAS-053](xas-053.md) (Jira cards on the board), [ADR-0015](../adr/0015-the-plugin-ships-no-jira-client.md)
+
+**Summary**:
+As the author, I want to put a Jira issue into the closed loop, so that work tracked in a
+company Jira reaches a repository through the loop.
+
+**Description**:
+On 2026-11-24 a Jira issue whose fix belongs in a public upstream repository could not enter
+the loop at all: its key's prefix is a Jira project, which spans many repositories, so no
+registry row can map it to one. A Jira issue differs from a GitHub issue in three ways, and
+each needs its own answer:
+
+- **No repository.** A Jira issue names none, and its project is not a repository. The
+  author names the repository when starting the loop.
+- **Criteria beyond the repository.** A Jira issue often carries the whole delivery: find the
+  cause on a build machine, release, update the consumer. Only part of it is a change in the
+  target repository. The plan must cover that part and nothing else; the rest is the
+  author's.
+- **Internal text, public repository.** The issue is company-internal; the target repository
+  can be public. The key, a link to the company's Jira and the issue's wording in a public
+  branch name, commit or pull request leak the company's internals. The loop cannot tell
+  from the remote's URL whether a repository is public, so it asks the host, and treats an
+  answer it cannot get as public.
+
+The store's `Closed loop` contract describes the evidence package's *Item* section as "the
+item's ID, title and link". For an internal item on a public remote that line needs an
+exception. The contract lives in the store, not here: the change to it goes there as a
+follow-up of this item.
+
+**Scope Decisions**:
+- 2026-11-24: The author names the repository in the start phrase. A repository field on
+  the board card or one read from the issue text lost: the first changes the Board contract
+  and `board.py` for one use, the second is a guess.
+- 2026-11-24: The loop proposes the split of the acceptance criteria and the author confirms
+  it in the Q&A offer, rather than the author listing the criteria in the start phrase.
+- 2026-11-24: On a public remote nothing of the Jira issue leaves the company: no key, no
+  link, no text. Only the key alone lost too, because it still names an internal tracker.
+
+**Acceptance Criteria**:
+- [ ] "put ABC-123 in the loop for spl-core" reads the Jira issue (summary, description,
+      comments) through the session's Jira access and runs the loop in spl-core
+- [ ] A Jira issue without a named repository makes the loop ask for the repository. The
+      loop does not guess one
+- [ ] Before the plan, the loop shows which acceptance criteria of the issue the repository
+      change covers and which go under *Your steps*. The Q&A offer shows this split, and the
+      plan covers only the first group
+- [ ] The pull moves the issue's card into *In Progress* and writes nothing to Jira
+- [ ] On a public remote, the branch name, the commits and the pull request body contain no
+      Jira key, no Jira link and no text copied from the Jira issue. The *Item* section
+      says that the item is internal, and *Your steps* tells the author to link it
+- [ ] A remote whose visibility the host cannot confirm as private counts as public
+- [ ] On a private remote, the *Item* section links the issue
+- [ ] Eval cases cover the Jira path, the missing repository and the public remote, with
+      a stand-in for Jira (ADR-0015)

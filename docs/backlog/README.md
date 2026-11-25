@@ -31,6 +31,9 @@
 - [XAS-073 — A script writes the board table](xas-073.md)
 - [XAS-072 — The tester shows RED without a CI run when the tests run only in CI](xas-072.md)
 - [XAS-071 — The closed loop reaches its gate in a repository whose CI lints commit messages](xas-071.md)
+- [XAS-070c — The closed loop takes a Jira issue as its item](xas-070c.md)
+- [XAS-070b — The closed loop takes a GitHub issue as its item](xas-070b.md)
+- [XAS-070a — One resolver turns every item address into its kind and repository](xas-070a.md)
 - [XAS-069 — The gate runs its tests without the push hook's git environment](xas-069.md)
 - [XAS-068 — An eval case for the closed loop's CI-as-gate path](xas-068.md)
 - [XAS-066 — A script finds a loop's state across worktrees on resume](xas-066.md)
@@ -63,7 +66,7 @@
 
 ### In Progress
 - [XAS-087 — The closed loop talks to its host through one script, with backends for GitHub, Gitea and Bitbucket Server](xas-087.md)
-- [XAS-070 — The closed loop takes a GitHub or Jira issue as its item](xas-070.md)
+- [XAS-070 — The closed loop takes a backlog item, a GitHub issue or a Jira issue as its item](xas-070.md)
 - [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)
 - [XAS-044a — ADR: requirements become a binding design artifact where sphinx-needs is in use](xas-044a.md)
 - [XAS-044 — Requirements as a binding design artifact where sphinx-needs is in use](xas-044.md)
