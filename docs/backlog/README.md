@@ -9,6 +9,7 @@
 ## Table of Contents
 
 ### Open
+- [XAS-105 — The closed loop writes its workspace files with the Write tool, so no shell safety check stops a headless run](xas-105.md)
 - [XAS-104 — The backlog is also found in doc/backlog](xas-104.md)
 - [XAS-100 — loop.py find locates a container worktree without walking the checkout](xas-100.md)
 - [XAS-099 — An eval run on Windows reads no login from the real APPDATA](xas-099.md)
