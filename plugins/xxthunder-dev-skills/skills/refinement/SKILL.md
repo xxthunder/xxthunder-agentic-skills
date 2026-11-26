@@ -47,7 +47,7 @@ When no backlog file is found, create one:
 2. Ask the user where the backlog should live (default: `docs/backlog/`)
 3. Ask the user for a **project ID prefix** — a short uppercase abbreviation of the repo/project name (e.g., `HSH` for HomeSweetHome). Store it in the Notes section of the backlog.
 4. Create `README.md` with the skeleton structure (Status Legend, an empty `## Table of Contents`, Notes with the ID prefix)
-5. Create the ongoing refinement item (`[PREFIX-001]`) as a separate file with `**Status**: In Progress`
+5. Create the ongoing refinement item (`[PREFIX-001]`) as a separate file in the form of the format reference's Ongoing Refinement Item, with `status: In Progress` in its YAML header
 6. Run `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" toc` — it writes the table of contents from the item files
 7. Ask the user if they have initial ideas to seed the backlog — draft entries using the format from the reference
 
@@ -106,12 +106,12 @@ Use AskUserQuestion to let the user choose their focus area:
 - Decide whether this is a **top-level item** or a **substory under an existing item**:
   - If the idea naturally belongs under an existing top-level item as one of several related pieces of work, it's a substory of that parent.
   - Otherwise it's top-level.
-- Create the item with the backlog script — it allocates the ID, writes the skeleton with `**Status**: Open` and lists it in the README's table of contents, and prints the new file's path (see "The backlog script" in the format reference):
+- Create the item with the backlog script — it allocates the ID, writes the skeleton with `status: Open` in its YAML header and lists it in the README's table of contents, and prints the new file's path (see "The backlog script" in the format reference):
   - **Top-level**: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" new "<title>" [--priority High|Medium|Low|—]`
   - **Substory of `PREFIX-NNN`**: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" new "<title>" --parent PREFIX-NNN`
 
   The title is one line. A non-zero exit from the script ends the step: show its message and stop. The item file, its ID and its TOC line come from the script, every time.
-- Fill in the free text of the file the script printed: replace the bracketed placeholders of `**Component**`, `**Summary**`, `**Description**` and `**Acceptance Criteria**` with the content, and add optional fields from the format reference where they help. Leave the heading, `**Status**` and the README alone — they belong to the script. No `**Epic**:` back-reference — the letter suffix encodes the parent.
+- Fill in the free text of the file the script printed: replace the `<...>` placeholders of `component:`, `## Summary`, `## Description` and `## Acceptance criteria` with the content, and add optional header keys and chapters from the format reference where they help. Leave the heading, `status:` and the README alone — they belong to the script. No `**Epic**:` back-reference — the letter suffix encodes the parent.
 - If this is the **first substory** under a top-level item, that item is now implicitly an epic. No rename needed; optionally add a **Substories** list to the parent for readability. The parent's status cascade (see format reference) now governs when it can be marked Done.
 - Show the user the item for review. It stays uncommitted, like every refinement change.
 

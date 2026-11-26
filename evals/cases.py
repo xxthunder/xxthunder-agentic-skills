@@ -1000,7 +1000,8 @@ def check_bootstrap(s: State) -> list[str]:
     return (no_store_commit(s) + no_local_commit(s)
             + expect(bool(re.search(r"\*\*ID prefix\*\*:\s*`SYNC`", readme)), "no SYNC prefix in the Notes")
             + expect("## Table of Contents" in readme and "sync-001.md" in readme, "TOC does not list SYNC-001")
-            + expect("**Status**: In Progress" in item, "no refinement item SYNC-001 In Progress")
+            + expect(bool(re.match(r"---\n(?:.*\n)*?status: In Progress\n(?:.*\n)*?---\n", item)),
+                     "no refinement item SYNC-001 In Progress in a YAML header")
             + expect(not s.demo_remote_subjects, "demo remote changed"))
 
 
@@ -1012,7 +1013,8 @@ def check_refine_summary(s: State) -> list[str]:
 
 NEW_ITEM = "docs/backlog/demo-008.md"
 BACKLOG_NEW_RE = re.compile(r"backlog\.py[\"']?\s+(?:--dir\s+\S+\s+)?new\s")
-PLACEHOLDER_RE = re.compile(r"\[(?:path/to/affected/file|user role|feature|benefit|Problem statement[^\]]*|First verifiable criterion)\]")
+PLACEHOLDER_RE = re.compile(r"<(?:path/to/affected/file|user role|feature|benefit|Problem statement[^>]*|First verifiable criterion)>")
+NEW_ITEM_HEADER_RE = re.compile(r"\A---\n(?:.*\n)*?status: Open\n(?:.*\n)*?---\n\n# \[DEMO-008\] ")
 
 
 def check_new_item(s: State) -> list[str]:
@@ -1022,8 +1024,7 @@ def check_new_item(s: State) -> list[str]:
     return (no_store_commit(s) + no_local_commit(s) + invoked(s, "refinement")
             + expect(not s.demo_remote_subjects, f"demo remote changed: {s.demo_remote_subjects}")
             + expect(any(BACKLOG_NEW_RE.search(c) for c in s.commands), f"not created by backlog.py new: {s.commands}")
-            + expect(item.startswith("# [DEMO-008] "), f"no DEMO-008 item: {item[:60]!r}")
-            + expect("**Status**: Open" in item, "DEMO-008 is not Open")
+            + expect(bool(NEW_ITEM_HEADER_RE.match(item)), f"no DEMO-008 item with a YAML header, Open: {item[:80]!r}")
             + expect("(demo-008.md)" in readme, "README does not list DEMO-008")
             + expect(not PLACEHOLDER_RE.search(item), "a skeleton placeholder is left in DEMO-008")
             + expect(not extra, f"other new items: {extra}"))

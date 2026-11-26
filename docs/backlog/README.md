@@ -65,6 +65,7 @@
 - [XAS-003 — Multi-agent skill authoring (single source, multi-target)](xas-003.md)
 
 ### In Progress
+- [XAS-106 — Backlog items with a YAML header, older items still read](xas-106.md)
 - [XAS-087 — The closed loop talks to its host through one script, with backends for GitHub, Gitea and Bitbucket Server](xas-087.md)
 - [XAS-070 — The closed loop takes a backlog item, a GitHub issue or a Jira issue as its item](xas-070.md)
 - [XAS-058 — Eval runs record duration and cost, and the report shows them](xas-058.md)

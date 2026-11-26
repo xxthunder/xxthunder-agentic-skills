@@ -17,7 +17,7 @@ docs/backlog/
 └── prefix-015.md
 ```
 
-The **item files are the single source of truth**: an item's status is its own `**Status**:` line. The README's table of contents is derived from the items by the backlog script and regenerated after every change — see [The backlog script](#the-backlog-script).
+The **item files are the single source of truth**: an item's status is the `status:` key of its own YAML header. The README's table of contents is derived from the items by the backlog script and regenerated after every change — see [The backlog script](#the-backlog-script).
 
 ### `README.md`
 
@@ -65,23 +65,34 @@ Note in the example above: `PREFIX-003` is an In-Progress epic. One of its subst
 Each item is a standalone file in the backlog folder. The heading is `#` (top-level, since it's the only item in the file):
 
 ```markdown
+---
+status: Open
+priority: Medium
+component: "`path/to/affected/file.ext`"
+---
+
 # [PREFIX-015] Brief descriptive title
 
-**Status**: Open
-**Priority**: Medium
-**Component**: `path/to/affected/file.ext`
+## Summary
 
-**Summary**:
-As a [user role], I want [feature] so that [benefit].
+As a <user role>, I want <feature> so that <benefit>.
 
-**Description**:
-[Problem statement. Current behavior. Why this matters.]
+## Description
 
-**Acceptance Criteria**:
+<Problem statement. Current behavior. Why this matters.>
+
+## Acceptance criteria
+
 - [ ] First verifiable criterion
 - [ ] Second verifiable criterion
 - [ ] All existing tests continue to pass
 ```
+
+The YAML header holds the fields the script reads; the chapters hold the text. Quote a header value that starts with a backtick or another character YAML reserves.
+
+### Older items
+
+Items written before the YAML header carry bold label lines instead (`**Status**: Open`, `**Priority**: Medium`, `**Summary**:`) and a `✅ DONE -` marker in the heading of a Done item. The script reads and updates both forms, so an older backlog needs no migration. `new` always writes the YAML header; leave the form of an existing item as it is.
 
 ## The backlog script
 
@@ -93,11 +104,11 @@ uv run "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py" <command>
 
 | Command | What it does |
 |---------|--------------|
-| `new "TITLE" [--priority P]` | Creates the next top-level item: allocates its ID, writes the [Open entry](#open-entry) skeleton with `**Status**: Open` and priority `P` (default `Medium`), regenerates the TOC and prints the new file's path. Refuses — writing nothing — when the title is not one line or the backlog cannot be read |
+| `new "TITLE" [--priority P]` | Creates the next top-level item: allocates its ID, writes the [Open entry](#open-entry) skeleton with `status: Open` and priority `P` (default `Medium`), regenerates the TOC and prints the new file's path. Refuses — writing nothing — when the title is not one line or the backlog cannot be read |
 | `new "TITLE" --parent PREFIX-NNN` | The same for the next substory under `PREFIX-NNN` |
 | `next-id` | Prints the next free top-level ID; the prefix comes from the README's Notes |
 | `next-id PREFIX-NNN` | Prints the next substory ID under `PREFIX-NNN` |
-| `set-status ID STATUS` | Sets `Open`, `"In Progress"`, `Done` or `Superseded` — status line, date, heading marker, epic cascade — and regenerates the TOC |
+| `set-status ID STATUS` | Sets `Open`, `"In Progress"`, `Done` or `Superseded` — status, date, epic cascade — and regenerates the TOC |
 | `toc` | Regenerates the README's table of contents from the items |
 | `check` | Lists every problem in the backlog, one per line; exit 1 if there is one |
 | `show [ID…]` | Prints ID, status, priority and title of the items, tab-separated; every item without IDs. Read-only |
@@ -143,50 +154,49 @@ Do **not** add a `**Epic**: PREFIX-###` field inside substory files. The letter 
 
 ## Entry Fields
 
-### Required fields (all entries)
+### Header keys
 
-| Field                  | Description                                              |
-|------------------------|----------------------------------------------------------|
-| **Status**             | `Open`, `In Progress`, `Done (YYYY-MM-DD)`, or `Superseded (YYYY-MM-DD)` for an item replaced by another |
-| **Priority**           | `High`, `Medium`, `Low`, or `—` (none)                  |
-| **Component**          | File path(s) affected (e.g., `roles/ssl-certify/`)       |
-| **Summary**            | User story: "As a [user], I want [feature] so that [benefit]" |
-| **Description**        | Detailed problem statement, current state, rationale     |
-| **Acceptance Criteria**| Checkbox list: `- [ ] Criterion` (unchecked) / `- [x] Criterion` (checked) |
+| Key          | Required | Description |
+|--------------|----------|-------------|
+| `status`     | yes | `Open`, `In Progress`, `Done (YYYY-MM-DD)`, or `Superseded (YYYY-MM-DD)` for an item replaced by another |
+| `priority`   | yes | `High`, `Medium`, `Low`, or `—` (none) |
+| `component`  | yes | File path(s) affected (e.g., `roles/ssl-certify/`) |
+| `blocked_by` | no  | Item IDs that block this one, as a list (e.g., `[HSH-006]`) |
+| `related`    | no  | Item IDs related to this one, not blocking |
 
-### Optional fields
+### Chapters
 
-| Field                    | When to include                                     |
-|--------------------------|-----------------------------------------------------|
-| **Depends on**           | When blocked by another item (e.g., `HSH-006`)     |
-| **Related**              | When related to other items (not blocking)           |
-| **Scope Decisions**      | When key architectural choices have been made        |
-| **Technical Notes**      | Implementation-specific details (socket paths, config snippets) |
-| **Dependencies**         | External system prerequisites                        |
-| **Related Documentation**| Links to guides or external references               |
+Required, in this order: `## Summary` (user story: "As a <user>, I want <feature> so that <benefit>"), `## Description` (problem statement, current state, rationale), `## Acceptance criteria` (checkbox list: `- [ ] Criterion` unchecked, `- [x] Criterion` checked).
+
+Optional, after them: `## Scope decisions` (key architectural choices), `## Technical notes` (implementation details such as socket paths or config snippets), `## Dependencies` (external system prerequisites), `## Related documentation` (links to guides or external references).
 
 ### Epic-only content
 
-A top-level item that has (or will have) substories may include a narrative **Substories** section listing the children by ID and title. This is purely informative — each substory's status is its own `**Status**:` line, not this list. Keep it as a bulleted list of `PREFIX-###<letter> — title` entries.
+A top-level item that has (or will have) substories may include a narrative **Substories** section listing the children by ID and title. This is purely informative — each substory's status is its own `status:`, not this list. Keep it as a bulleted list of `PREFIX-###<letter> — title` entries.
 
 ### Open entry
 
 File: `prefix-015.md`
 
 ```markdown
+---
+status: Open
+priority: Medium
+component: "`path/to/affected/file.ext`"
+---
+
 # [HSH-015] Brief descriptive title
 
-**Status**: Open
-**Priority**: Medium
-**Component**: `path/to/affected/file.ext`
+## Summary
 
-**Summary**:
-As a [user role], I want [feature] so that [benefit].
+As a <user role>, I want <feature> so that <benefit>.
 
-**Description**:
-[Problem statement. Current behavior. Why this matters.]
+## Description
 
-**Acceptance Criteria**:
+<Problem statement. Current behavior. Why this matters.>
+
+## Acceptance criteria
+
 - [ ] First verifiable criterion
 - [ ] Second verifiable criterion
 - [ ] All existing tests continue to pass
@@ -194,20 +204,22 @@ As a [user role], I want [feature] so that [benefit].
 
 ### In Progress entry
 
-Same as Open but with `**Status**: In Progress` and some criteria may be checked off.
+Same as Open but with `status: In Progress` and some criteria may be checked off.
 
 ### Completed entry
 
 File: `prefix-001.md`
 
 ```markdown
-# [HSH-001] ✅ DONE - Brief descriptive title
+---
+status: Done (YYYY-MM-DD)
+priority: Medium
+component: "`path/to/affected/file.ext`"
+---
 
-**Status**: Done (YYYY-MM-DD)
-**Priority**: Medium
-**Component**: `path/to/affected/file.ext`
+# [HSH-001] Brief descriptive title
 
-[... all other fields with all acceptance criteria checked ...]
+[... all chapters, with all acceptance criteria checked ...]
 ```
 
 ### TOC format (in `README.md`)
@@ -216,7 +228,7 @@ File: `prefix-001.md`
 
 - **Sections in a fixed order**: `### Open`, `### In Progress`, `### Done`, then `### Superseded` only when an item has that status.
 - **Newest ID first** in every section. The sort key is prefix, then number, then letter, so an epic sits below its own substories and a legacy prefix forms a block of its own.
-- **One line per item**: `- [ID — title](file)`, the title taken from the item heading without the `✅ DONE -` marker. Nothing else goes on the line: `toc` refuses a line that carries text after its link rather than drop the text, and `check` names a heading that starts with a done marker other than `✅ DONE -`. What an item needs to say, it says in its own file.
+- **One line per item**: `- [ID — title](file)`, the title taken from the item heading (an [older item](#older-items) loses its `✅ DONE -` marker). Nothing else goes on the line: `toc` refuses a line that carries text after its link rather than drop the text, and `check` names a heading that starts with a done marker other than `✅ DONE -`, and any done marker on an item with a YAML header. What an item needs to say, it says in its own file.
 
 ```markdown
 ### Open
@@ -282,12 +294,15 @@ Every backlog should include an ongoing refinement item that is never completed.
 File: `prefix-0xx.md`
 
 ```markdown
+---
+status: In Progress
+priority: —
+---
+
 # [PREFIX-0XX] Backlog refinement
 
-**Status**: In Progress
-**Priority**: —
+## Description
 
-**Description**:
 Ongoing backlog refinement — create, review, clarify, and update user stories. Add research findings, scope decisions, acceptance criteria, and implementation details as needed. This item is never completed; all refinement commits reference this ID.
 ```
 
@@ -298,7 +313,7 @@ Open → In Progress → Done
                    ↘ Superseded (replaced by another item)
 ```
 
-Change a status with `set-status ID STATUS`. It writes the `**Status**` line (dated today for `Done` and `Superseded`), adds or removes the `✅ DONE -` heading prefix, applies the epic cascade above, and regenerates the TOC.
+Change a status with `set-status ID STATUS`. It writes `status:` (on an [older item](#older-items), the `**Status**` line and the `✅ DONE -` heading prefix), dated today for `Done` and `Superseded`, applies the epic cascade above, and regenerates the TOC.
 
 No file moves needed — all items stay in the same folder.
 
