@@ -34,10 +34,10 @@ Do **not** trigger on refinement phrases ("let's refine", "add a new story") —
 
 The skill assumes the backlog follows the format documented by the `refinement` skill:
 - One markdown file per item at `docs/backlog/<prefix>-###[<letter>].md` (or equivalent — discover the directory by locating `README.md` in the repo's backlog folder)
-- A `README.md` in the same folder whose table of contents is derived from the items; the item's own `**Status**:` line is its status
+- A `README.md` in the same folder whose table of contents is derived from the items; the item's own status is its status
 - Item headings are `# [PREFIX-###] Title` or `# [PREFIX-###<letter>] Title`
-- Item files carry a `**Status**:` line
-- Acceptance Criteria are GitHub-flavored checkboxes (`- [ ]` / `- [x]`) under a `**Acceptance Criteria**:` heading; optionally also a `**UAT**:` or `**User Acceptance Tests**:` block with the same checkbox syntax
+- Item files carry their status as `status:` in a YAML header, or, in an older item, as a `**Status**:` line; both forms are valid and the script handles both
+- Acceptance Criteria are GitHub-flavored checkboxes (`- [ ]` / `- [x]`) under a `## Acceptance criteria` chapter (an older item: a `**Acceptance Criteria**:` label); optionally also a `**UAT**:` or `**User Acceptance Tests**:` block with the same checkbox syntax
 
 If any of these invariants look violated, stop and ask the user rather than guessing.
 
@@ -49,9 +49,9 @@ Given an ID like `XAS-025` or `XAS-003a`:
 
 1. Locate the backlog directory. The script finds `docs/backlog/` from anywhere inside the repository; for a backlog elsewhere, ask the user and pass `--dir <path>` before the command.
 2. Find the item file — filename is the lowercased ID (`xas-025.md`, `xas-003a.md`).
-3. Read the file. Extract current `**Status**:`, the Acceptance Criteria block, and the UAT block if present.
+3. Read the file. Extract the current status, the Acceptance Criteria block, and the UAT block if present.
 
-The item's `**Status**:` line is its current status. The README follows from it; `set-status` and `toc` regenerate it.
+The item's status (`status:` in its header, or its `**Status**:` line) is its current status. The README follows from it; `set-status` and `toc` regenerate it.
 
 **An ID from outside this backlog.** Before a pull or a complete looks for the file, check
 the ID's prefix. This repository's own prefix is the one on the backlog README's
@@ -97,7 +97,7 @@ the ID's prefix. This repository's own prefix is the one on the backlog README's
    - **By substring**: "the 'deterministic output' AC" — match against the checkbox text, first substring hit wins.
 2. Precondition: the checkbox is currently `- [ ]`. If already `- [x]`, report and stop.
 3. In the item file: replace that single `- [ ]` with `- [x]`. Do not touch any other checkbox.
-4. Do **not** change the item's `**Status**:` or the README — ticking criteria does not move an item between sections. Status transitions happen only on pull / complete.
+4. Do **not** change the item's status or the README — ticking criteria does not move an item between sections. Status transitions happen only on pull / complete.
 5. Report which criterion was ticked and how many remain unchecked.
 
 #### Complete (→ Done)
@@ -121,7 +121,7 @@ the ID's prefix. This repository's own prefix is the one on the backlog README's
 
    This check **prompts and hands off**. It never authors the ADR itself, and it never blocks the close — declining completes the item as normal. Enforcement is out of scope by design.
 
-3. Run `set-status <ID> Done`. It writes `**Status**: Done (YYYY-MM-DD)` dated today from the system clock (pass `--date YYYY-MM-DD` when the user names another day), adds the `✅ DONE -` heading prefix, and regenerates the TOC. It refuses to close an epic while a substory is neither Done nor Superseded.
+3. Run `set-status <ID> Done`. It writes the status `Done (YYYY-MM-DD)` dated today from the system clock (pass `--date YYYY-MM-DD` when the user names another day), adds the `✅ DONE -` heading prefix to an older item without a YAML header, and regenerates the TOC. It refuses to close an epic while a substory is neither Done nor Superseded.
 4. **Take the card off the board** ([Board move](#board-move)) — for this item only; an epic closed by the cascade below has no card.
 5. **Epic cascade**: when the script prints `<PARENT>: every substory is closed; the epic can be closed`, prompt the user: "All substories of `PREFIX-###` are now closed. Close the epic too?" If yes, run the Complete operation on the parent (its ACs still get the same precondition check — an epic may have its own ACs independent of substory completion).
 6. Report: the script's output lines, the board move or why there was none — only when a board is configured —, any cascade decisions (accepted or deferred), and whether a binding-design candidate was found and what the user chose.
@@ -205,7 +205,7 @@ This skill does not know whether a logbook is configured; `logbook` finds out an
 
 - **Boundary transitions come from this skill's own triggers** — "start XAS-025" at the beginning of a unit of work, "tick AC 2 on XAS-025" as criteria are met, "close XAS-025" at the end. No other skill needs to drive them, and none should auto-check ACs mid-flight: only the user knows which criterion a given change satisfied.
 - **`commit-helper`** commits a pull on its own, on the default branch, at once; it commits every other staged backlog edit on the feature branch — a ticked criterion with its code, a close as the last commit. Mention the backlog ID in the commit subject or body per conventional-commit practice.
-- **`refinement`** hands off to this skill for any status mutation; it does not edit `**Status**:` fields directly.
+- **`refinement`** hands off to this skill for any status mutation; it does not edit an item's status directly.
 - **`design-record`** receives the hand-off from the binding-design check on Complete. Closing an item is the last moment to lift design that outlives it into the ADR log, because nothing keeps a closed item current.
 - **`next`** shows the board this skill moves cards on; both read the store's `Board` contract. This skill never ranks — placing a card in the waiting column is `next put`.
 - **`board.py`** makes the card move — `pull` and `close` here, `put` and `drop` from `next` — and owns the board's format.

@@ -319,16 +319,18 @@ def test_next_id_refuses_a_backlog_without_an_id_prefix_note(tmp_path):
 
 def skeleton(iid: str, title: str, priority: str = "Medium") -> str:
     return (
+        "---\n"
+        "status: Open\n"
+        f"priority: {priority}\n"
+        "component: <path/to/affected/file>\n"
+        "---\n\n"
         f"# [{iid}] {title}\n\n"
-        "**Status**: Open\n"
-        f"**Priority**: {priority}\n"
-        "**Component**: [path/to/affected/file]\n\n"
-        "**Summary**:\n"
-        "As a [user role], I want [feature] so that [benefit].\n\n"
-        "**Description**:\n"
-        "[Problem statement. Current behavior. Why this matters.]\n\n"
-        "**Acceptance Criteria**:\n"
-        "- [ ] [First verifiable criterion]\n"
+        "## Summary\n\n"
+        "As a <user role>, I want <feature> so that <benefit>.\n\n"
+        "## Description\n\n"
+        "<Problem statement. Current behavior. Why this matters.>\n\n"
+        "## Acceptance criteria\n\n"
+        "- [ ] <First verifiable criterion>\n"
     )
 
 
@@ -848,6 +850,79 @@ def test_cli_show_in_progress(tmp_path, capsys):
     assert capsys.readouterr().out == "SC-002\tIn Progress\t—\tStory\n"
 
 
+# ---------- items with a YAML header ----------
+
+
+def header_item(iid: str, title: str, status: str, priority: str = "Medium") -> str:
+    return f"---\nstatus: {status}\npriority: {priority}\n---\n\n# [{iid}] {title}\n\n## Summary\n\nBody.\n"
+
+
+def test_toc_lists_header_items_and_bold_label_items_alike(tmp_path):
+    b = make_backlog(tmp_path, [("SC-001", "Old", "Open")])
+    write_item(b, "SC-002", header_item("SC-002", "New", "Done (2026-01-02)"))
+
+    backlog.write_toc(b)
+
+    assert "### Open\n- [SC-001 — Old](sc-001.md)\n\n### In Progress\n\n### Done\n- [SC-002 — New](sc-002.md)\n" in readme(b)
+    assert backlog.check(b) == []
+
+
+@pytest.mark.parametrize("status", ["In Progress", '"In Progress"', "'In Progress'"])
+def test_show_reads_status_and_priority_from_the_header(tmp_path, status):
+    b = make_backlog(tmp_path, [])
+    write_item(b, "SC-001", header_item("SC-001", "New", status, "High"))
+
+    lines, problems = backlog.show(b, ["SC-001"])
+
+    assert lines == ["SC-001\tIn Progress\tHigh\tNew"]
+    assert problems == []
+
+
+def test_a_status_line_below_the_header_is_not_the_status(tmp_path):
+    b = make_backlog(tmp_path, [])
+    write_item(b, "SC-001", "---\npriority: Low\n---\n\n# [SC-001] New\n\n**Status**: Open\n")
+
+    assert "sc-001.md: no 'status:' in the YAML header" in backlog.check(b)
+
+
+def test_set_status_done_rewrites_the_header_and_leaves_the_heading_unmarked(tmp_path):
+    b = make_backlog(tmp_path, [])
+    write_item(b, "SC-001", header_item("SC-001", "New", "In Progress"))
+
+    backlog.set_status(b, "SC-001", "Done", TODAY)
+
+    assert item(b, "SC-001") == header_item("SC-001", "New", "Done (2026-10-03)")
+    assert "### Done\n- [SC-001 — New](sc-001.md)\n" in readme(b)
+
+
+def test_set_status_on_a_header_item_keeps_crlf(tmp_path):
+    b = make_backlog(tmp_path, [])
+    p = b / "sc-001.md"
+    p.write_bytes(header_item("SC-001", "New", "Open").replace("\n", "\r\n").encode("utf-8"))
+
+    backlog.set_status(b, "SC-001", "In Progress", TODAY)
+
+    assert p.read_bytes() == header_item("SC-001", "New", "In Progress").replace("\n", "\r\n").encode("utf-8")
+
+
+def test_set_status_on_a_substory_with_a_header_pulls_its_bold_label_epic(tmp_path):
+    b = make_backlog(tmp_path, [("SC-003", "Epic", "Open")])
+    write_item(b, "SC-003a", header_item("SC-003a", "Sub", "Open"))
+
+    backlog.set_status(b, "SC-003a", "In Progress", TODAY)
+
+    assert "**Status**: In Progress" in item(b, "SC-003")
+    assert "status: In Progress\n" in item(b, "SC-003a")
+
+
+def test_check_reports_a_done_marker_in_the_heading_of_a_header_item(tmp_path):
+    b = make_backlog(tmp_path, [])
+    write_item(b, "SC-001", header_item("SC-001", "✅ DONE - New", "Done (2026-01-02)"))
+    backlog.write_toc(b)
+
+    assert backlog.check(b) == ["sc-001.md: an item with a YAML header has no done marker in its heading"]
+
+
 # ---------- another repository, read at its remote's default branch ----------
 
 
@@ -994,7 +1069,7 @@ def test_cli_new_prints_the_path_of_the_new_item(tmp_path, capsys):
     assert backlog.main(["--dir", str(b), "new", "Next story", "--priority", "Low"]) == 0
     assert backlog.main(["--dir", str(b), "new", "A piece", "--parent", "SC-003"]) == 0
     assert capsys.readouterr().out == f"{b / 'sc-004.md'}\n{b / 'sc-003a.md'}\n"
-    assert "**Priority**: Low" in item(b, "SC-004")
+    assert "priority: Low\n" in item(b, "SC-004")
 
 
 def test_cli_new_refusal_goes_to_stderr_and_fails(tmp_path, capsys):

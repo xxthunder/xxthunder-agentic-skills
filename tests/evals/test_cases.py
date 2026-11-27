@@ -31,9 +31,9 @@ SUPERSEDING_ADR = "docs/adr/0003-the-sync-job-runs-as-a-long-running-worker.md"
 ADR_ONE_CONVERTED = ADR_ONE_ORIGINAL.replace("# ADR-0001 \u2014 ", "# ADR-0001: ", 1).replace(
     "\n\n**Status**", "\n\n```{decision} The sync job runs from cron\n:id: ADR-0001\n:status: Accepted\n```\n\n**Status**", 1)
 NEW_ITEM = "docs/backlog/demo-008.md"
-NEW_ITEM_TEXT = ("# [DEMO-008] Document the release process\n\n**Status**: Open\n**Priority**: Medium\n"
-                 "**Component**: `RELEASE.md`\n\n**Summary**:\nAs a maintainer, I want the release steps written down.\n\n"
-                 "**Description**:\nNobody remembers them.\n\n**Acceptance Criteria**:\n- [ ] RELEASE.md lists every step\n")
+NEW_ITEM_TEXT = ("---\nstatus: Open\npriority: Medium\ncomponent: \"`RELEASE.md`\"\n---\n\n"
+                 "# [DEMO-008] Document the release process\n\n## Summary\n\nAs a maintainer, I want the release steps written down.\n\n"
+                 "## Description\n\nNobody remembers them.\n\n## Acceptance criteria\n\n- [ ] RELEASE.md lists every step\n")
 
 
 def untouched(output: str = "", skills: list[str] | None = None) -> State:
@@ -286,7 +286,7 @@ def expected(name: str) -> State:
         return replace(s, demo_status={}, demo_porcelain="?? docs/backlog/\n",
                        demo_files={"docs/backlog/README.md": "## Table of Contents\n\n- [SYNC-001 — Refinement](sync-001.md)\n"
                                                              "\n## Notes\n\n**ID prefix**: `SYNC`\n",
-                                   "docs/backlog/sync-001.md": "# [SYNC-001] Refinement\n\n**Status**: In Progress\n"})
+                                   "docs/backlog/sync-001.md": "---\nstatus: In Progress\npriority: —\n---\n\n# [SYNC-001] Refinement\n"})
     if name == "refinement-summary":
         return replace(s, skills=["xxthunder-dev-skills:refinement"],
                        output="In Progress: DEMO-003, DEMO-006. Open: DEMO-001, DEMO-002, DEMO-004, DEMO-007.")
@@ -812,14 +812,29 @@ def test_new_item_written_by_hand_fails():
 def test_new_item_with_placeholders_left_fails():
     s = expected("refinement-new-item")
     s = replace(s, demo_files={**s.demo_files, NEW_ITEM: NEW_ITEM_TEXT.replace("Nobody remembers them.",
-                                                                              "[Problem statement. Current behavior.]")})
+                                                                              "<Problem statement. Current behavior.>")})
     assert any("placeholder" in f for f in BY_NAME["refinement-new-item"].check(s))
 
 
 def test_new_item_that_gets_pulled_fails():
     s = expected("refinement-new-item")
-    s = replace(s, demo_files={**s.demo_files, NEW_ITEM: NEW_ITEM_TEXT.replace("**Status**: Open", "**Status**: In Progress")})
+    s = replace(s, demo_files={**s.demo_files, NEW_ITEM: NEW_ITEM_TEXT.replace("status: Open", "status: In Progress")})
     assert BY_NAME["refinement-new-item"].check(s)
+
+
+def test_new_item_in_the_bold_label_form_fails():
+    s = expected("refinement-new-item")
+    old_form = ("# [DEMO-008] Document the release process\n\n**Status**: Open\n**Priority**: Medium\n\n"
+                "**Summary**:\nAs a maintainer, I want the release steps written down.\n")
+    s = replace(s, demo_files={**s.demo_files, NEW_ITEM: old_form})
+    assert any("YAML header" in f for f in BY_NAME["refinement-new-item"].check(s))
+
+
+def test_bootstrap_with_a_bold_label_refinement_item_fails():
+    s = expected("refinement-bootstrap")
+    s = replace(s, demo_files={**s.demo_files, "docs/backlog/sync-001.md":
+                               "# [SYNC-001] Backlog refinement\n\n**Status**: In Progress\n"})
+    assert any("YAML header" in f for f in BY_NAME["refinement-bootstrap"].check(s))
 
 
 def test_new_item_that_commits_fails():

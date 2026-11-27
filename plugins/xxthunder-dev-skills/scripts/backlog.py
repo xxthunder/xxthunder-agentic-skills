@@ -26,6 +26,9 @@ ITEM_FILE_RE = re.compile(r"^([a-z]+)-(\d{3})([a-z]?)\.md$")
 HEADING_RE = re.compile(r"^#\s+\[([A-Z]+-\d{3}[a-z]?)\]\s*(.*)$", re.M)
 STATUS_RE = re.compile(r"^\*\*Status\*\*:[ \t]*(.+?)[ \t]*$", re.M)
 PRIORITY_RE = re.compile(r"^\*\*Priority\*\*:[ \t]*(.+?)[ \t]*$", re.M)
+HEADER_RE = re.compile(r"\A---\n(.*?\n)?---\n", re.S)
+HEADER_STATUS_RE = re.compile(r"^status:[ \t]*(.+?)[ \t]*$", re.M)
+HEADER_PRIORITY_RE = re.compile(r"^priority:[ \t]*(.+?)[ \t]*$", re.M)
 TOC_LINE_RE = re.compile(r"^\s*- \[.*?\]\(([a-z]+-\d{3}[a-z]?\.md)\)")
 PREFIX_NOTE_RE = re.compile(r"\*\*ID prefix\*\*:\s*`([A-Z]+)`")
 DATE_RE = re.compile(r"\((.+)\)$")
@@ -44,20 +47,25 @@ REMOTE = "origin"
 REFINEMENT_TITLE = "Backlog refinement"
 PRIORITIES = ("High", "Medium", "Low", "—")
 SKELETON = """\
+---
+status: Open
+priority: {priority}
+component: <path/to/affected/file>
+---
+
 # [{id}] {title}
 
-**Status**: Open
-**Priority**: {priority}
-**Component**: [path/to/affected/file]
+## Summary
 
-**Summary**:
-As a [user role], I want [feature] so that [benefit].
+As a <user role>, I want <feature> so that <benefit>.
 
-**Description**:
-[Problem statement. Current behavior. Why this matters.]
+## Description
 
-**Acceptance Criteria**:
-- [ ] [First verifiable criterion]
+<Problem statement. Current behavior. Why this matters.>
+
+## Acceptance criteria
+
+- [ ] <First verifiable criterion>
 """
 
 
@@ -73,6 +81,7 @@ class Item:
     status: str
     marked: bool
     priority: str | None = None
+    header: bool = False
 
     @property
     def sort_key(self) -> tuple[str, int, str]:
@@ -102,17 +111,28 @@ def item_files(backlog: Path) -> list[Path]:
 
 
 def parse_item(path: Path) -> Item:
+    """Read an item with a YAML header, or an older one with bold `**Status**:` lines."""
     text, _ = read_text(path)
     heading = HEADING_RE.search(text)
-    status = STATUS_RE.search(text)
-    priority = PRIORITY_RE.search(text)
+    header = HEADER_RE.match(text)
     if heading is None:
         raise BacklogError(f"{path.name}: no '# [PREFIX-###] Title' heading")
-    if status is None:
-        raise BacklogError(f"{path.name}: no '**Status**:' line")
+    if header:
+        fields = header.group(1) or ""
+        status, priority = HEADER_STATUS_RE.search(fields), HEADER_PRIORITY_RE.search(fields)
+        if status is None:
+            raise BacklogError(f"{path.name}: no 'status:' in the YAML header")
+        status_value = status.group(1).strip("\"'")
+        priority_value = priority.group(1).strip("\"'") if priority else None
+    else:
+        status, priority = STATUS_RE.search(text), PRIORITY_RE.search(text)
+        if status is None:
+            raise BacklogError(f"{path.name}: no '**Status**:' line")
+        status_value = status.group(1)
+        priority_value = priority.group(1) if priority else None
     title = heading.group(2).removeprefix(DONE_MARK)
     marked = heading.group(2).startswith(DONE_MARK)
-    return Item(path, heading.group(1), title, status.group(1), marked, priority.group(1) if priority else None)
+    return Item(path, heading.group(1), title, status_value, marked, priority_value, header is not None)
 
 
 def load_items(backlog: Path) -> list[Item]:
@@ -313,11 +333,20 @@ def parent_of(backlog: Path, item: Item) -> Item | None:
 
 
 def write_status(item: Item, status: str, today: str) -> None:
-    """Rewrite the item's status line and heading marker; nothing else."""
+    """Rewrite the item's status line and heading marker; nothing else.
+
+    An item with a YAML header keeps its status there and has no done marker.
+    """
     text, crlf = read_text(item.path)
     value = f"{status} ({today})" if status in CLOSED else status
-    text = STATUS_RE.sub(f"**Status**: {value}", text, count=1)
-    mark = DONE_MARK if status == "Done" else ""
+    header = HEADER_RE.match(text)
+    if header:
+        fields = HEADER_STATUS_RE.sub(f"status: {value}", header.group(1), count=1)
+        text = f"---\n{fields}---\n{text[header.end():]}"
+        mark = ""
+    else:
+        text = STATUS_RE.sub(f"**Status**: {value}", text, count=1)
+        mark = DONE_MARK if status == "Done" else ""
     text = HEADING_RE.sub(lambda m: f"# [{m.group(1)}] {mark}{item.title}", text, count=1)
     write_text(item.path, text, crlf)
 
@@ -364,6 +393,8 @@ def check_item(item: Item) -> list[str]:
             date.fromisoformat(m.group(1))
         except ValueError:
             problems.append(f"{item.path.name}: date {m.group(1)!r} does not parse")
+    if item.header and item.marked:
+        problems.append(f"{item.path.name}: an item with a YAML header has no done marker in its heading")
     if item.marked and section != "Done":
         problems.append(f"{item.path.name}: heading marked DONE but status is {item.status!r}")
     other_mark = OTHER_DONE_MARK_RE.match(item.title)
